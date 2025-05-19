@@ -11,6 +11,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+# from django.templatetags.static import static
+# from django.urls import reverse_lazy
+# from django.utils.translation import gettext_lazy as _
+
+
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -117,6 +123,50 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+
+
+# UNFOLD = {
+#     "SIDEBAR": {
+#         "show_search": False,  # Search in applications and models names
+#         "show_all_applications": False,  # Dropdown with all applications and models
+#         "navigation": [
+#             {
+#                 "title": _("Navigation"),
+#                 "separator": True,  # Top border
+#                 "collapsible": True,  # Collapsible group of links
+#                 "items": [
+#                     {
+#                         "title": _("Dashboard"),
+#                         "icon": "dashboard",  # Supported icon set: https://fonts.google.com/icons
+#                         "link": reverse_lazy("admin:index"),
+#                         "badge": "sample_app.badge_callback",
+#                         "permission": lambda request: request.user.is_superuser,
+#                     },
+#                     {
+#                         "title": _("Users"),
+#                         "icon": "people",
+#                         "link": reverse_lazy("admin:auth_user_changelist"),
+#                     },
+#                 ],
+#             },
+#         ],
+#     },
+# }
+
+# UNFOLD = {
+#     "SIDEBAR": {
+#         "items": [
+#             {
+#                 "title": _("Upload Voucher Codes"),
+#                 "icon": "upload",  # or any icon from Material Icons
+#                 "link": reverse_lazy("admin:upload_voucher_codes"),
+#             },
+#         ]
+#     }
+# }
+
+
 
 
 # Internationalization

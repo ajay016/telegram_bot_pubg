@@ -129,3 +129,17 @@ class BinancePayNoteAdmin(ModelAdmin):
     search_fields = ('note', 'user__username')
     readonly_fields = ('created_at',)
     ordering = ('-created_at',)
+
+
+@admin.register(UploadVoucherCode)
+class UploadVoucherCodeAdmin(admin.ModelAdmin):
+    list_display = ('product', 'uploaded_at')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        try:
+            obj.process_file()
+        except Exception as e:
+            self.message_user(request, f"Error: {str(e)}", level='error')
+        else:
+            self.message_user(request, "Voucher codes uploaded successfully.")

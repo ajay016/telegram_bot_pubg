@@ -4,6 +4,7 @@ from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
 from django.utils.crypto import get_random_string
+from django.core.exceptions import ValidationError
 
 
 
@@ -157,6 +158,34 @@ class VoucherCode(models.Model):
 
     def __str__(self):
         return f"{self.code} ({'used' if self.is_used else 'available'})"
+    
+
+class UploadVoucherCode(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    file = models.FileField(upload_to='voucher_uploads/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        # Optional: validate the file before saving
+        if not self.file.name.endswith(('.txt',)):
+            raise ValidationError("Only .txt files are allowed.")
+
+    def process_file(self):
+        # Read the file and create voucher codes
+        self.file.seek(0)
+        lines = self.file.read().decode('utf-8').splitlines()
+
+        valid_lines = []
+        for line in lines:
+            code = line.strip()
+            if code and code.isalnum():
+                valid_lines.append(code)
+            else:
+                raise ValidationError(f"Invalid code format: '{line}'")
+
+        # Save voucher codes
+        for code in valid_lines:
+            VoucherCode.objects.get_or_create(code=code, product=self.product)
     
 
 class OrderItem(models.Model):
