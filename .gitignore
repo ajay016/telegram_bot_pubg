@@ -1,0 +1,5 @@
+db.sqlite3
+binance_address.txt
+binance_keys.txt
+bybit_api_keys.txt
+venv/
