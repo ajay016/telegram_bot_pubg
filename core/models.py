@@ -80,11 +80,45 @@ class SubCategory(models.Model):
 
     def __str__(self):
         return f"{self.category.name} → {self.name}"
+    
+
+class RechargeCategory(models.Model):
+    name        = models.CharField(max_length=200, unique=True)
+    slug        = models.SlugField(unique=True)
+    description = models.TextField(blank=True)
+    is_active   = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = 'Recharge Categories'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+# class RechargeSubCategory(models.Model):
+#     category    = models.ForeignKey(
+#         Category,
+#         related_name='subcategories',
+#         on_delete=models.CASCADE
+#     )
+#     name        = models.CharField(max_length=200)
+#     slug        = models.SlugField(unique=True)
+#     description = models.TextField(blank=True)
+#     is_active   = models.BooleanField(default=True)
+
+#     class Meta:
+#         unique_together = ('category', 'name')
+#         ordering = ['name']
+
+#     def __str__(self):
+#         return f"{self.category.name} → {self.name}"
+
 
 class Product(models.Model):
     name           = models.CharField(max_length=200)
     slug           = models.SlugField(unique=True)
     description    = models.TextField(blank=True)
+    recharge_description = models.TextField(blank=True)
     price          = models.DecimalField(max_digits=10, decimal_places=2)
     in_stock       = models.BooleanField(default=True)
     stock_quantity = models.PositiveIntegerField(default=0)
@@ -104,6 +138,14 @@ class Product(models.Model):
         related_name='products',
         on_delete=models.SET_NULL
     )
+    
+    recharge_category    = models.ForeignKey(
+        RechargeCategory,
+        null=True,
+        blank=True,
+        related_name='products',
+        on_delete=models.SET_NULL
+    )
 
     class Meta:
         ordering = ['name']
@@ -114,8 +156,8 @@ class Product(models.Model):
     def clean(self):
         from django.core.exceptions import ValidationError
         # Ensure product belongs to either category or subcategory
-        if not self.category and not self.subcategory:
-            raise ValidationError('Product must have a category or subcategory.')
+        if not self.category and not self.subcategory and not self.recharge_category:
+            raise ValidationError('Product must have a category or subcategory or a recharge category.')
         if self.category and self.subcategory:
             raise ValidationError('Product cannot have both category and subcategory.')
     

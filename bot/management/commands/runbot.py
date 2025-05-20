@@ -25,6 +25,7 @@ BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
 
 
 SELECT_QUANTITY = 1
+TYPING_RECHARGE_PUBG_ID, SELECT_RECHARGE_QUANTITY = range(2)
 
 
 @sync_to_async
@@ -80,15 +81,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Welcome! What would you like to do?", reply_markup=reply_markup)
+    await update.message.reply_text("Welcome! What would   like to do?", reply_markup=reply_markup)
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    
+    print("data raw: ", data)
 
     if data == "browse_products":
+        print('data: ', data)
         categories = await get_categories()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"cat_{cat['id']}")]
@@ -96,6 +100,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
         await query.edit_message_text("Select a category:", reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    elif data == "game_id_recharge_auto":
+        recharge_categories = await sync_to_async(list)(RechargeCategory.objects.filter(is_active=True))
+        if not recharge_categories:
+            return await query.edit_message_text("No recharge categories found.")
+
+        keyboard = [
+            [InlineKeyboardButton(cat.name, callback_data=f"recharge_cat_{cat.id}")]
+            for cat in recharge_categories
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
+        await query.edit_message_text("🎮 Select a recharge category:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("cat_"):
         category_id = int(data.split("_")[1])
@@ -109,6 +125,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="browse_products")])
         await query.edit_message_text("Here are some exciting products that we offer for you!!", reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    elif data.startswith("recharge_cat_"):
+        cat_id = int(data.split("_")[-1])
+        products = await sync_to_async(list)(
+            Product.objects.filter(recharge_category_id=cat_id, in_stock=True)
+        )
+        if not products:
+            return await query.edit_message_text("No products found in this category.")
+
+        keyboard = [
+            [InlineKeyboardButton(p.name, callback_data=f"recharge_product_{p.id}")]
+            for p in products
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="game_id_recharge_auto")])
+        await query.edit_message_text("💎 Select a product to recharge:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("prod_"):
         product_id = int(data.split("_")[1])
@@ -129,6 +160,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🔙 Back", callback_data=f"cat_{product['category']}")]
         ]
         await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        
+    elif data.startswith("recharge_product_"):
+        product_id = int(data.split("_")[-1])
+        context.user_data["pending_recharge_product_id"] = product_id
+        context.user_data["expecting_pubg_id"] = True
+
+        await query.edit_message_text(
+            "🎯 Enter your Player PUBG ID.\n\n"
+            "⚠️ If you want to cancel, type 'cancel'."
+        )
+        return TYPING_RECHARGE_PUBG_ID
 
     elif data.startswith("buy_"):
         # Extract product_id
@@ -242,9 +284,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     telegram_user = update.effective_user
     telegram_id = telegram_user.id
+    
+    if text.lower() == "cancel":
+        await update.message.reply_text("❌ Operation cancelled.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Check if we're expecting a PUBG ID
+    if context.user_data.get("pending_recharge_product_id") is not None and context.user_data.get("expecting_pubg_id"):
+        context.user_data["pubg_id"] = text
+        context.user_data["expecting_pubg_id"] = False
+
+        await update.message.reply_text("🔢 Enter the quantity you want to recharge:")
+        return SELECT_RECHARGE_QUANTITY
 
     if "Browse Products" in text:
         await show_categories(update, context)
+        
+    if "Game ID Recharge" in text:
+        await show_recharge_categories(update, context)
 
     elif "My Wallet" in text:
         # Fetch wallet and user data
@@ -308,14 +366,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "Leaderboard" in text:
         await update.message.reply_text("Here's the leaderboard.")
 
-    elif "Game ID Recharge (Auto)" in text:
-        await update.message.reply_text("Please send your Game ID to proceed.")
+    # elif "Game ID Recharge (Auto)" in text:
+    #     await update.message.reply_text("Please send your Game ID to proceed.")
 
     elif "Contact Support" in text:
         await update.message.reply_text("Contact us at support@example.com.")
 
     elif "API" in text:
         await update.message.reply_text("API access is coming soon!")
+        
+        
         
         
 async def handle_amount_input(update, context):
@@ -448,11 +508,228 @@ async def handle_quantity_input(update, context):
     # Clean up and go back to main menu
     context.user_data.pop("pending_product_id", None)
     return ConversationHandler.END
+
+# Handle the input for recharge product
+# async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     try:
+#         quantity = int(update.message.text)
+#         if quantity <= 0:
+#             raise ValueError
+#     except ValueError:
+#         await update.message.reply_text("🚫 Please enter a valid positive number for quantity.")
+#         return SELECT_RECHARGE_QUANTITY
+
+#     product_id = context.user_data.get("pending_recharge_product_id")
+#     pubg_id = context.user_data.get("pubg_id")
+
+#     if not product_id or not pubg_id:
+#         await update.message.reply_text("❌ Missing product or PUBG ID. Please start again.")
+#         return ConversationHandler.END
+
+#     # Fetch product and user from DB
+#     # product = await sync_to_async(Product.objects.get)(id=product_id)
+#     user_data     = update.effective_user
+#     telegram_user = await get_or_create_telegram_user(user_data)
+    
+#     product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+#     total_price = product.price * quantity
+
+#     # Check wallet balance
+#     if wallet.balance < total_price:
+#         await update.message.reply_text(
+#             f"💸 Insufficient balance.\n\n"
+#             f"💰 Required: ${total_price}\n"
+#             f"🔻 Your Balance: ${wallet.balance}"
+#         )
+#         return ConversationHandler.END
+
+#     # Deduct wallet balance
+#     wallet.balance -= total_price
+#     await sync_to_async(wallet.save)()
+
+#     # Determine order status
+#     status = "Completed" if product.recharge_description else "Pending"
+
+#     # Create the order
+#     order = await sync_to_async(Order.objects.create)(
+#         user=telegram_user,
+#         total_price=total_price,
+#         status=status,
+#     )
+
+#     # Clear temporary context data
+#     context.user_data.clear()
+
+#     await update.message.reply_text(
+#         f"✅ Order placed successfully!\n\n"
+#         f"📦 Product: {product.name}\n"
+#         f"🆔 PUBG ID: {pubg_id}\n"
+#         f"🔢 Quantity: {quantity}\n"
+#         f"💰 Total: ${total_price}\n"
+#         f"💼 Wallet Balance Remaining: ${wallet.balance}\n"
+#         f"📝 Status: {status}"
+#     )
+#     return ConversationHandler.END
+
+
+async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        qty = int(update.message.text)
+        if qty <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("🚫 Please enter a valid positive number for quantity.")
+        return SELECT_RECHARGE_QUANTITY
+
+    product_id = context.user_data.get("pending_recharge_product_id")
+    pubg_id = context.user_data.get("pubg_id")
+
+    if not product_id or not pubg_id:
+        await update.message.reply_text("❌ Missing product or PUBG ID. Please start again.")
+        return ConversationHandler.END
+
+    user_data = update.effective_user
+    telegram_user = await get_or_create_telegram_user(user_data)
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    total = product.price * qty
+
+    if wallet.balance < total:
+        await update.message.reply_text(
+            f"💸 Insufficient balance.\n\n"
+            f"💰 Required: ${total}\n"
+            f"🔻 Your Balance: ${wallet.balance}"
+        )
+        return ConversationHandler.END
+
+    
+    if not product.recharge_description:
+        # 🔁 Use do_purchase_and_vouchers() as-is
+        order, remaining_balance, used_voucher_codes = await do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total)
+        await update.message.reply_text(
+            f"✅ Thank you for your purchase!\n\n"
+            f"• Product: {product.name}\n"
+            f"• Quantity: {qty}\n"
+            f"• Total: ${total:.2f}\n\n"
+            f"🛍️ Your order #{order.id} is now in process.\n\n"
+            f"💰 Your new balance is ${new_balance:.2f}.",
+            parse_mode="HTML"
+        )
+    else:
+        # 🔁 Check vouchers and handle Completed order with recharge_description
+        @sync_to_async
+        def complete_recharge_order():
+            with transaction.atomic():
+                available_vouchers = list(
+                    VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+                )
+                print('available vouchers: ', available_vouchers)
+                if len(available_vouchers) < qty:
+                    return None, None, None, "no_voucher"
+
+                wallet.balance -= total
+                wallet.save()
+
+                order = Order.objects.create(
+                    user=telegram_user,
+                    total_price=total,
+                    status="Completed"
+                )
+
+                used_voucher_codes = []
+
+                for i in range(qty):
+                    voucher = available_vouchers[i]
+                    voucher.is_used = True
+                    voucher.save()
+
+                    used_voucher_codes.append(voucher.code)  # <-- collect codes
+
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        quantity=1,
+                        unit_price=product.price,
+                        voucher_code=voucher
+                    )
+
+                return order, wallet.balance, used_voucher_codes, None
+
+        order, new_balance, used_voucher_codes, error = await complete_recharge_order()
+
+        if error == "no_voucher":
+            await update.message.reply_text("⚠️ No voucher is available right now. Please try again later.")
+            return ConversationHandler.END
+
+        if used_voucher_codes:
+            voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
+            print('voucher text: ', voucher_text)
+        else:
+            voucher_text = "❌ No voucher code available right now.\n"
+
+        await update.message.reply_text(
+            f"✅ Thank you for your purchase!\n\n"
+            f"• Product: {product.name}\n"
+            f"• Quantity: {qty}\n"
+            f"• Total: ${total:.2f}\n\n"
+            f"{voucher_text}\n"
+            f"🛍️ Your order #{order.id} is now in process.\n\n"
+            f"💰 Your new balance is ${new_balance:.2f}.",
+            parse_mode="HTML"
+        )
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+@sync_to_async
+def do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total):
+    with transaction.atomic():
+        wallet.balance -= total
+        wallet.save()
+
+        product.stock_quantity -= qty
+        product.save()
+
+        order = Order.objects.create(
+            user=telegram_user,
+            total_price=total,
+            status="Completed" if product.recharge_description else "Pending"
+        )
+
+        available_vouchers = list(
+            VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+        )
+
+        used_voucher_codes = []
+
+        for i in range(qty):
+            voucher = available_vouchers[i] if i < len(available_vouchers) else None
+            if voucher:
+                voucher.is_used = True
+                voucher.save()
+                used_voucher_codes.append(voucher.code)  # ✅ Fix here
+
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=1,
+                unit_price=product.price,
+                voucher_code=voucher
+            )
+
+        return order, wallet.balance, used_voucher_codes
+
    
         
 @sync_to_async
 def get_categories():
     return list(Category.objects.all().values("id", "name"))
+
+@sync_to_async
+def get_recharge_categories():
+    return list(RechargeCategory.objects.all().values("id", "name"))
 
 async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     categories = await get_categories()
@@ -465,6 +742,21 @@ async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Here are some Categories where you can find exciting products!!", reply_markup=reply_markup)
+    
+
+async def show_recharge_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    recharge_categories = await get_recharge_categories()
+    
+    print('Recharge Categories: ', recharge_categories)
+
+    keyboard = [
+        [InlineKeyboardButton(recharge_cat["name"], callback_data=f"recharge_cat_{recharge_cat['id']}")]
+        for recharge_cat in recharge_categories
+    ]
+    keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Here are some Recharge options where you can find exciting products!!", reply_markup=reply_markup)
     
 
 @sync_to_async
@@ -688,6 +980,8 @@ conv_handler = ConversationHandler(
         SELECT_QUANTITY: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quantity_input)
         ],
+        TYPING_RECHARGE_PUBG_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
+        SELECT_RECHARGE_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_recharge_quantity_input)],
     },
     fallbacks=[
         CommandHandler("cancel", cancel),
@@ -695,23 +989,23 @@ conv_handler = ConversationHandler(
 )
 
 
-class Command(BaseCommand):
-    help = "Run the Telegram bot"
+# class Command(BaseCommand):
+#     help = "Run the Telegram bot"
 
-    def handle(self, *args, **options):
-        app = ApplicationBuilder().token(BOT_TOKEN).build()
+#     def handle(self, *args, **options):
+#         app = ApplicationBuilder().token(BOT_TOKEN).build()
         
-        app.add_handler(CommandHandler("start", start))
+#         app.add_handler(CommandHandler("start", start))
         
-        app.add_handler(conv_handler)
+#         app.add_handler(conv_handler)
         
-        app.add_handler(CallbackQueryHandler(button_handler))
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+#         app.add_handler(CallbackQueryHandler(button_handler))
+#         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         
-        app.post_init = lambda app: set_commands(app)
+#         app.post_init = lambda app: set_commands(app)
         
-        print("🤖 Bot is running...")
-        app.run_polling()
+#         print("🤖 Bot is running...")
+#         app.run_polling()
 
 
 

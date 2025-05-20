@@ -28,6 +28,11 @@ class SubCategoryAdmin(ModelAdmin):
     list_display = ('name', 'category', 'is_active')
     list_filter  = ('category', 'is_active')
     prepopulated_fields = {'slug': ('name',)}
+    
+@admin.register(RechargeCategory)
+class RechargeCategoryAdmin(ModelAdmin):
+    list_display = ('name', 'is_active')
+    prepopulated_fields = {'slug': ('name',)}
 
 @admin.register(Product)
 class ProductAdmin(ModelAdmin):
