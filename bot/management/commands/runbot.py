@@ -13,7 +13,7 @@ from telegram import Bot
 import aiohttp
 from telegram import InlineKeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler, ApplicationBuilder
-from core.models import *  # Replace 'store' with your app name
+from core.models import *  
 from api.bybit_websocket.bybit_ws import bybit_ws_listener
 
 
@@ -23,9 +23,16 @@ django.setup()
 
 BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
 
+# SELECT_QUANTITY = 1
+# TYPING_RECHARGE_PUBG_ID, SELECT_RECHARGE_QUANTITY = range(2)
 
-SELECT_QUANTITY = 1
-TYPING_RECHARGE_PUBG_ID, SELECT_RECHARGE_QUANTITY = range(2)
+(
+    SELECT_QUANTITY,
+    TYPING_RECHARGE_PUBG_ID,
+    SELECT_RECHARGE_QUANTITY,
+    SELECTING_PAYMENT_METHOD,
+    AMOUNT_INPUT
+) = range(5)
 
 
 @sync_to_async
@@ -114,6 +121,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🎮 Select a recharge category:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("cat_"):
+        print('data category: ', data)
         category_id = int(data.split("_")[1])
         products = await get_products_by_category(category_id)
         if not products:
@@ -142,6 +150,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("💎 Select a product to recharge:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("prod_"):
+        print('data category product: ', data)
         product_id = int(data.split("_")[1])
         product = await get_product_detail(product_id)
         if not product:
@@ -162,6 +171,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         
     elif data.startswith("recharge_product_"):
+        print('data recharger category product: ', data)
         product_id = int(data.split("_")[-1])
         context.user_data["pending_recharge_product_id"] = product_id
         context.user_data["expecting_pubg_id"] = True
@@ -173,6 +183,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return TYPING_RECHARGE_PUBG_ID
 
     elif data.startswith("buy_"):
+        print('data buy product: ', data)
         # Extract product_id
         product_id = int(data.split("_")[1])
         # Store it so the next handler can use it
@@ -183,6 +194,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"ℹ️ How many units of product #{product_id} would you like to buy?\n\n"
             "Please enter a whole number (e.g. 2)."
         )
+        print('SELECT_QUANTITY: ', SELECT_QUANTITY)
         return SELECT_QUANTITY
 
     elif data == "main_menu":
@@ -292,6 +304,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if we're expecting a PUBG ID
     if context.user_data.get("pending_recharge_product_id") is not None and context.user_data.get("expecting_pubg_id"):
+        print('expecting pubg id: ', text)
         context.user_data["pubg_id"] = text
         context.user_data["expecting_pubg_id"] = False
 
@@ -429,6 +442,7 @@ async def delete_message_after_delay(bot, chat_id, message_id, delay=20*60):
 
 # Function to handle the quantity input for purchasing a product
 async def handle_quantity_input(update, context):
+    print('handle quantity input for category product entered')
     text = update.message.text.strip()
     try:
         qty = int(text)
@@ -574,6 +588,7 @@ async def handle_quantity_input(update, context):
 
 
 async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print('handle recharge quantity input entered')
     try:
         qty = int(update.message.text)
         if qty <= 0:
@@ -613,7 +628,7 @@ async def handle_recharge_quantity_input(update: Update, context: ContextTypes.D
             f"• Quantity: {qty}\n"
             f"• Total: ${total:.2f}\n\n"
             f"🛍️ Your order #{order.id} is now in process.\n\n"
-            f"💰 Your new balance is ${new_balance:.2f}.",
+            f"💰 Your new balance is ${remaining_balance:.2f}.",
             parse_mode="HTML"
         )
     else:
@@ -965,7 +980,7 @@ async def set_commands(app: Application):
 
 # AMOUNT_INPUT = 1  # Define a state
 
-SELECTING_PAYMENT_METHOD, AMOUNT_INPUT = range(2)
+# SELECTING_PAYMENT_METHOD, AMOUNT_INPUT = range(2)
 
 conv_handler = ConversationHandler(
     entry_points=[
