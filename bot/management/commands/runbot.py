@@ -33,6 +33,7 @@ BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
     SELECTING_PAYMENT_METHOD,
     AMOUNT_INPUT
 ) = range(5)
+CONFIRM_PURCHASE = range(6, 7)
 
 
 @sync_to_async
@@ -88,7 +89,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("Welcome! What would   like to do?", reply_markup=reply_markup)
+    await update.message.reply_text("🏬 Welcome to MSNFAMER-E-STORE Bot!\n\n"
+                                      "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
+                                      "🔘 Choose an option below to get started:",
+                                      reply_markup=reply_markup)
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -441,51 +445,196 @@ async def delete_message_after_delay(bot, chat_id, message_id, delay=20*60):
     
 
 # Function to handle the quantity input for purchasing a product
+# async def handle_quantity_input(update, context):
+#     print('handle quantity input for category product entered')
+#     text = update.message.text.strip()
+#     try:
+#         qty = int(text)
+#         if qty <= 0:
+#             raise ValueError
+#     except ValueError:
+#         await update.message.reply_text("❌ Please enter a positive whole number.")
+#         return SELECT_QUANTITY
+
+#     user_data     = update.effective_user
+#     telegram_user = await get_or_create_telegram_user(user_data)
+#     product_id    = context.user_data.get("pending_product_id")
+#     if not product_id:
+#         await update.message.reply_text("⚠️ No product selected. Please start again with Buy.")
+#         return ConversationHandler.END
+
+#     # fetch product + wallet
+#     product, wallet = await get_product_and_wallet(telegram_user, product_id)
+#     total = product.price * Decimal(qty)
+
+#     if wallet.balance < total:
+#         await update.message.reply_text(
+#             f"❌ You need ${total:.2f} but your balance is only ${wallet.balance:.2f}."
+#         )
+#         return ConversationHandler.END
+
+#     # Everything looks good — perform DB updates atomically
+#     @sync_to_async
+#     def do_purchase_and_vouchers():
+#         with transaction.atomic():
+#             # Deduct balance
+#             wallet.balance -= total
+#             wallet.save()
+
+#             print('wallet amount has just changed')
+#             # Deduct stock quantity
+#             product.stock_quantity -= qty
+#             product.save()
+
+#             # Create order
+#             order = Order.objects.create(
+#                 user=telegram_user,
+#                 total_price=total
+#             )
+
+#             # Get available voucher codes (if any)
+#             available_vouchers = list(
+#                 VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+#             )
+
+#             for i in range(qty):
+#                 voucher = available_vouchers[i] if i < len(available_vouchers) else None
+#                 if voucher:
+#                     voucher.is_used = True
+#                     voucher.save()
+
+#                 OrderItem.objects.create(
+#                     order=order,
+#                     product=product,
+#                     quantity=1,  # single quantity per item
+#                     unit_price=product.price,
+#                     voucher_code=voucher
+#                 )
+
+#             return order, wallet.balance
+
+#     order, new_balance = await do_purchase_and_vouchers()
+
+#     # Respond to user
+#     await update.message.reply_text(
+#         f"✅ Thank you for your purchase!\n\n"
+#         f"• Product: {product.name}\n"
+#         f"• Quantity: {qty}\n"
+#         f"• Total: ${total:.2f}\n\n"
+#         f"🛍️ Your order #{order.id} is now in process.\n\n"
+#         f"💰 Your new balance is ${wallet.balance:.2f}.",
+#         parse_mode="HTML"
+#     )
+
+#     # Clean up and go back to main menu
+#     context.user_data.pop("pending_product_id", None)
+#     return ConversationHandler.END
+
+
+
+
 async def handle_quantity_input(update, context):
     print('handle quantity input for category product entered')
     text = update.message.text.strip()
+
+    user_data = update.effective_user
+    telegram_user = await get_or_create_telegram_user(user_data)
+    product_id = context.user_data.get("pending_product_id")
+
+    if not product_id:
+        await update.message.reply_text("⚠️ No product selected. Please start again with Buy.")
+        return ConversationHandler.END
+
+    # Fetch product and wallet
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    # Validate quantity input
     try:
         qty = int(text)
-        if qty <= 0:
+        if qty <= 0 or qty > product.stock_quantity:
             raise ValueError
     except ValueError:
-        return await update.message.reply_text("❌ Please enter a positive whole number.")
+        await update.message.reply_text(
+            f"You are purchasing <b>{product.name}</b> 🎮\n\n"
+            f"📝 Enter a quantity between <b>1</b> and <b>{product.stock_quantity}</b>\n\n"
+            f"If you want to cancel the process, send /cancel",
+            parse_mode="HTML"
+        )
+        return SELECT_QUANTITY
 
-    user_data     = update.effective_user
-    telegram_user = await get_or_create_telegram_user(user_data)
-    product_id    = context.user_data.get("pending_product_id")
-    if not product_id:
-        return await update.message.reply_text("⚠️ No product selected. Please start again with Buy.")
-
-    # fetch product + wallet
-    product, wallet = await get_product_and_wallet(telegram_user, product_id)
     total = product.price * Decimal(qty)
 
+    # Check balance
     if wallet.balance < total:
-        return await update.message.reply_text(
+        await update.message.reply_text(
             f"❌ You need ${total:.2f} but your balance is only ${wallet.balance:.2f}."
         )
+        return ConversationHandler.END
 
-    # Everything looks good — perform DB updates atomically
+    # Store values in context for confirmation step
+    context.user_data["pending_qty"] = qty
+    context.user_data["pending_total"] = total
+
+    # Confirmation message with inline buttons
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes", callback_data="confirm_purchase_yes"),
+            InlineKeyboardButton("❌ No", callback_data="confirm_purchase_no"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        f"🛒 <b>Confirm your purchase</b>\n\n"
+        f"• Product: <b>{product.name}</b>\n"
+        f"• Quantity: <b>{qty}</b>\n"
+        f"• Total Price: <b>${total:.2f}</b>\n"
+        f"• Telegram ID: <code>{user_data.id}</code>",
+        reply_markup=reply_markup,
+        parse_mode="HTML"
+    )
+
+    return CONFIRM_PURCHASE
+
+
+
+async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_data = update.effective_user
+    telegram_user = await get_or_create_telegram_user(user_data)
+
+    if query.data == "confirm_purchase_no":
+        await query.edit_message_text("❌ Purchase cancelled.")
+        return ConversationHandler.END
+
+    product_id = context.user_data.get("pending_product_id")
+    qty = context.user_data.get("pending_qty")
+    total = context.user_data.get("pending_total")
+
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    # Check again in case user balance or stock changed
+    if wallet.balance < total or product.stock_quantity < qty:
+        await query.edit_message_text("⚠️ Purchase failed due to insufficient balance or stock.")
+        return ConversationHandler.END
+
+    # Perform purchase
     @sync_to_async
     def do_purchase_and_vouchers():
         with transaction.atomic():
-            # Deduct balance
             wallet.balance -= total
             wallet.save()
 
-            print('wallet amount has just changed')
-            # Deduct stock quantity
             product.stock_quantity -= qty
             product.save()
 
-            # Create order
             order = Order.objects.create(
                 user=telegram_user,
                 total_price=total
             )
 
-            # Get available voucher codes (if any)
             available_vouchers = list(
                 VoucherCode.objects.filter(product=product, is_used=False)[:qty]
             )
@@ -499,7 +648,7 @@ async def handle_quantity_input(update, context):
                 OrderItem.objects.create(
                     order=order,
                     product=product,
-                    quantity=1,  # single quantity per item
+                    quantity=1,
                     unit_price=product.price,
                     voucher_code=voucher
                 )
@@ -508,20 +657,20 @@ async def handle_quantity_input(update, context):
 
     order, new_balance = await do_purchase_and_vouchers()
 
-    # Respond to user
-    await update.message.reply_text(
-        f"✅ Thank you for your purchase!\n\n"
-        f"• Product: {product.name}\n"
-        f"• Quantity: {qty}\n"
-        f"• Total: ${total:.2f}\n\n"
-        f"🛍️ Your order #{order.id} is now in process.\n\n"
-        f"💰 Your new balance is ${wallet.balance:.2f}.",
+    await query.edit_message_text(
+        f"✅ <b>Thank you for your purchase!</b>\n\n"
+        f"🛒 Product: <b>{product.name}</b>\n"
+        f"🔢 Quantity: <b>{qty}</b>\n"
+        f"💲 Total: <b>${total:.2f}</b>\n"
+        f"🛍️ New Balance: <b>${new_balance:.2f}</b>\n"
+        f"💰 Order ID: <code>{order.id}</code>\n\n"
+        "⏳ Your order is now in process.",
         parse_mode="HTML"
     )
 
-    # Clean up and go back to main menu
-    context.user_data.pop("pending_product_id", None)
+    context.user_data.clear()
     return ConversationHandler.END
+
 
 # Handle the input for recharge product
 # async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -978,8 +1127,6 @@ async def set_commands(app: Application):
 
 
 
-# AMOUNT_INPUT = 1  # Define a state
-
 # SELECTING_PAYMENT_METHOD, AMOUNT_INPUT = range(2)
 
 conv_handler = ConversationHandler(
@@ -997,11 +1144,38 @@ conv_handler = ConversationHandler(
         ],
         TYPING_RECHARGE_PUBG_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
         SELECT_RECHARGE_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_recharge_quantity_input)],
+        CONFIRM_PURCHASE: [CallbackQueryHandler(handle_purchase_confirmation)],
     },
     fallbacks=[
         CommandHandler("cancel", cancel),
     ],
 )
+
+
+# conv_handler = ConversationHandler(
+#     entry_points=[
+#         CommandHandler("start", start),
+#         CallbackQueryHandler(button_handler, pattern="^buy_"),  # Only buy_... triggers
+#     ],
+#     states={
+#         SELECT_QUANTITY: [
+#             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_quantity_input)
+#         ],
+#         TYPING_RECHARGE_PUBG_ID: [
+#             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)
+#         ],
+#         SELECT_RECHARGE_QUANTITY: [
+#             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_recharge_quantity_input)
+#         ],
+#         AMOUNT_INPUT: [
+#             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_amount_input),
+#         ],
+#     },
+#     fallbacks=[
+#         CommandHandler("cancel", cancel),
+#     ],
+# )
+
 
 
 # class Command(BaseCommand):
