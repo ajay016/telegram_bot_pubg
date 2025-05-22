@@ -154,12 +154,20 @@ class Product(models.Model):
         return self.name
 
     def clean(self):
-        from django.core.exceptions import ValidationError
-        # Ensure product belongs to either category or subcategory
+        # Ensure product belongs to either category or subcategory or recharge category
         if not self.category and not self.subcategory and not self.recharge_category:
             raise ValidationError('Product must have a category or subcategory or a recharge category.')
+
         if self.category and self.subcategory:
             raise ValidationError('Product cannot have both category and subcategory.')
+
+        # Conditional requirement for recharge_description
+        if self.recharge_category:
+            if self.recharge_description:
+                raise ValidationError('Recharge products must not have a recharge description.')
+        else:
+            if not self.recharge_description:
+                raise ValidationError('Non-recharge products must have a recharge description.')
     
 
 
@@ -187,6 +195,7 @@ class Order(models.Model):
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
     status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Pending')
     created_at  = models.DateTimeField(auto_now_add=True)
+    pubg_id    = models.CharField(max_length=20, blank=True, null=True)
 
     def __str__(self):
         return f"Order #{self.id} — {self.status}"
@@ -235,6 +244,7 @@ class OrderItem(models.Model):
     product      = models.ForeignKey('Product', on_delete=models.PROTECT)
     quantity     = models.PositiveIntegerField()
     unit_price   = models.DecimalField(max_digits=10, decimal_places=2)
+    pubg_id    = models.CharField(max_length=20, blank=True, null=True)
     voucher_code = models.ForeignKey(
         VoucherCode,
         null=True,

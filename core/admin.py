@@ -60,7 +60,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
-    list_display = ('id', 'user', 'total_price', 'status', 'created_at')
+    list_display = ('id', 'user', 'pubg_id', 'total_price', 'status', 'created_at')
     list_filter = ('status', 'created_at')
     search_fields = ('user__telegram_id', 'user__username')
     date_hierarchy = 'created_at'
@@ -70,7 +70,7 @@ class OrderAdmin(ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(ModelAdmin):
-    list_display = ('order', 'product', 'quantity', 'unit_price', 'voucher_code')
+    list_display = ('order', 'product', 'quantity', 'unit_price', 'pubg_id', 'voucher_code')
     list_filter = ('product',)
     search_fields = ('order__id', 'product__name')
     autocomplete_fields = ('order', 'product', 'voucher_code')

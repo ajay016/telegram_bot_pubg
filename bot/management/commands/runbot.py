@@ -34,6 +34,7 @@ BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
     AMOUNT_INPUT
 ) = range(5)
 CONFIRM_PURCHASE = range(6, 7)
+CONFIRM_RECHARGE_PURCHASE = 8
 
 
 @sync_to_async
@@ -182,7 +183,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(
             "🎯 Enter your Player PUBG ID.\n\n"
-            "⚠️ If you want to cancel, type 'cancel'."
+            "⚠️ If you want to cancel, type /cancel."
         )
         return TYPING_RECHARGE_PUBG_ID
 
@@ -192,12 +193,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         product_id = int(data.split("_")[1])
         # Store it so the next handler can use it
         context.user_data["pending_product_id"] = product_id
+        
+        user_data = update.effective_user
+        telegram_user = await get_or_create_telegram_user(user_data)
+        product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
         # Ask quantity
         await query.edit_message_text(
-            f"ℹ️ How many units of product #{product_id} would you like to buy?\n\n"
-            "Please enter a whole number (e.g. 2)."
+            f"ℹ️ You are purchasing <b>{product.name}</b> 🎮\n\n"
+            f"📝 Enter a quantity between <b>1</b> and <b>{product.stock_quantity}</b>\n\n"
+            f"If you want to cancel the process, send /cancel",
+            parse_mode="HTML"
         )
+        
         print('SELECT_QUANTITY: ', SELECT_QUANTITY)
         return SELECT_QUANTITY
 
@@ -249,7 +257,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text = (
                 f"💵 Please enter the amount (in USD) you want to deposit\n"
                 f"📌 Example: 40.00\n\n"
-                f"📝 If you want to cancel the operation send \\cancel"
+                f"📝 If you want to cancel the operation send /cancel"
             )
             await query.edit_message_text(text)
             
@@ -312,7 +320,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["pubg_id"] = text
         context.user_data["expecting_pubg_id"] = False
 
-        await update.message.reply_text("🔢 Enter the quantity you want to recharge:")
+        await update.message.reply_text("🔢 Enter the quantity you want to recharge: \n\n To cancel the operation type /cancel")
         return SELECT_RECHARGE_QUANTITY
 
     if "Browse Products" in text:
@@ -401,7 +409,7 @@ async def handle_amount_input(update, context):
         amount = float(update.message.text.strip())
         print('entered amount: ', amount)
     except ValueError:
-        await update.message.reply_text("❌ Invalid amount. Please enter a number (e.g., 15.0)")
+        await update.message.reply_text("❌ Invalid amount. Please enter a number (e.g., 15.0)\n\n  To cancel the operation type /cancel")
         return
 
     user = await get_or_create_telegram_user(update.effective_user)
@@ -551,8 +559,15 @@ async def handle_quantity_input(update, context):
     # Validate quantity input
     try:
         qty = int(text)
-        if qty <= 0 or qty > product.stock_quantity:
-            raise ValueError
+        if qty <= 0:
+            raise ValueError("Quantity must be positive")
+        if qty > product.stock_quantity:
+            await update.message.reply_text(
+                f"🚫 Only <b>{product.stock_quantity}</b> units of <b>{product.name}</b> are in stock.\n"
+                f"The operation has been cancelled. Please start again if you want to make a new purchase.",
+                parse_mode="HTML"
+            )
+            return ConversationHandler.END
     except ValueError:
         await update.message.reply_text(
             f"You are purchasing <b>{product.name}</b> 🎮\n\n"
@@ -615,14 +630,25 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 
     product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
-    # Check again in case user balance or stock changed
     if wallet.balance < total or product.stock_quantity < qty:
         await query.edit_message_text("⚠️ Purchase failed due to insufficient balance or stock.")
         return ConversationHandler.END
 
-    # Perform purchase
+    # Check if enough vouchers are available BEFORE placing order
+    available_vouchers = await sync_to_async(list)(
+        VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+    )
+    if len(available_vouchers) < qty:
+        await query.edit_message_text(
+            f"⚠️ Only <b>{len(available_vouchers)}</b> voucher code(s) are currently available for <b>{product.name}</b>.\n"
+            f"Please try again later when more codes are in stock.",
+            parse_mode="HTML"
+        )
+        return ConversationHandler.END
+
+    # Place order if sufficient vouchers exist
     @sync_to_async
-    def do_purchase_and_vouchers():
+    def complete_recharge_order_with_vouchers():
         with transaction.atomic():
             wallet.balance -= total
             wallet.save()
@@ -635,15 +661,13 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
                 total_price=total
             )
 
-            available_vouchers = list(
-                VoucherCode.objects.filter(product=product, is_used=False)[:qty]
-            )
+            assigned_codes = []
 
             for i in range(qty):
-                voucher = available_vouchers[i] if i < len(available_vouchers) else None
-                if voucher:
-                    voucher.is_used = True
-                    voucher.save()
+                voucher = available_vouchers[i]
+                voucher.is_used = True
+                voucher.save()
+                assigned_codes.append(voucher.code)
 
                 OrderItem.objects.create(
                     order=order,
@@ -653,23 +677,28 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
                     voucher_code=voucher
                 )
 
-            return order, wallet.balance
+            return order, wallet.balance, assigned_codes
 
-    order, new_balance = await do_purchase_and_vouchers()
+    order, new_balance, assigned_codes = await complete_recharge_order_with_vouchers()
+
+    voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    description = f"\n🧾 <b>Recharge Description:</b>\n<code>{product.recharge_description}</code>" if product.recharge_description else ""
 
     await query.edit_message_text(
         f"✅ <b>Thank you for your purchase!</b>\n\n"
         f"🛒 Product: <b>{product.name}</b>\n"
         f"🔢 Quantity: <b>{qty}</b>\n"
         f"💲 Total: <b>${total:.2f}</b>\n"
-        f"🛍️ New Balance: <b>${new_balance:.2f}</b>\n"
-        f"💰 Order ID: <code>{order.id}</code>\n\n"
-        "⏳ Your order is now in process.",
+        f"💼 New Balance: <b>${new_balance:.2f}</b>\n"
+        f"🧾 Order ID: <code>{order.id}</code>"
+        f"{description}\n\n"
+        f"🎁 <b>Voucher Codes Assigned:</b>\n{voucher_lines}",
         parse_mode="HTML"
     )
 
     context.user_data.clear()
     return ConversationHandler.END
+
 
 
 # Handle the input for recharge product
@@ -736,6 +765,118 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 #     return ConversationHandler.END
 
 
+# async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     print('handle recharge quantity input entered')
+#     try:
+#         qty = int(update.message.text)
+#         if qty <= 0:
+#             raise ValueError
+#     except ValueError:
+#         await update.message.reply_text("🚫 Please enter a valid positive number for quantity.")
+#         return SELECT_RECHARGE_QUANTITY
+
+#     product_id = context.user_data.get("pending_recharge_product_id")
+#     pubg_id = context.user_data.get("pubg_id")
+
+#     if not product_id or not pubg_id:
+#         await update.message.reply_text("❌ Missing product or PUBG ID. Please start again.")
+#         return ConversationHandler.END
+
+#     user_data = update.effective_user
+#     telegram_user = await get_or_create_telegram_user(user_data)
+#     product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+#     total = product.price * qty
+
+#     if wallet.balance < total:
+#         await update.message.reply_text(
+#             f"💸 Insufficient balance.\n\n"
+#             f"💰 Required: ${total}\n"
+#             f"🔻 Your Balance: ${wallet.balance}"
+#         )
+#         return ConversationHandler.END
+
+    
+#     if not product.recharge_description:
+#         # 🔁 Use do_purchase_and_vouchers() as-is
+#         order, remaining_balance, used_voucher_codes = await do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total)
+#         await update.message.reply_text(
+#             f"✅ Thank you for your purchase!\n\n"
+#             f"• Product: {product.name}\n"
+#             f"• Quantity: {qty}\n"
+#             f"• Total: ${total:.2f}\n\n"
+#             f"🛍️ Your order #{order.id} is now in process.\n\n"
+#             f"💰 Your new balance is ${remaining_balance:.2f}.",
+#             parse_mode="HTML"
+#         )
+#     else:
+#         # 🔁 Check vouchers and handle Completed order with recharge_description
+#         @sync_to_async
+#         def complete_recharge_order():
+#             with transaction.atomic():
+#                 available_vouchers = list(
+#                     VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+#                 )
+#                 print('available vouchers: ', available_vouchers)
+#                 if len(available_vouchers) < qty:
+#                     return None, None, None, "no_voucher"
+
+#                 wallet.balance -= total
+#                 wallet.save()
+
+#                 order = Order.objects.create(
+#                     user=telegram_user,
+#                     total_price=total,
+#                     status="Completed"
+#                 )
+
+#                 used_voucher_codes = []
+
+#                 for i in range(qty):
+#                     voucher = available_vouchers[i]
+#                     voucher.is_used = True
+#                     voucher.save()
+
+#                     used_voucher_codes.append(voucher.code)  # <-- collect codes
+
+#                     OrderItem.objects.create(
+#                         order=order,
+#                         product=product,
+#                         quantity=1,
+#                         unit_price=product.price,
+#                         voucher_code=voucher
+#                     )
+
+#                 return order, wallet.balance, used_voucher_codes, None
+
+#         order, new_balance, used_voucher_codes, error = await complete_recharge_order()
+
+#         if error == "no_voucher":
+#             await update.message.reply_text("⚠️ No voucher is available right now. Please try again later.")
+#             return ConversationHandler.END
+
+#         if used_voucher_codes:
+#             voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
+#             print('voucher text: ', voucher_text)
+#         else:
+#             voucher_text = "❌ No voucher code available right now.\n"
+
+#         await update.message.reply_text(
+#             f"✅ Thank you for your purchase!\n\n"
+#             f"• Product: {product.name}\n"
+#             f"• Quantity: {qty}\n"
+#             f"• Total: ${total:.2f}\n\n"
+#             f"{voucher_text}\n"
+#             f"🛍️ Your order #{order.id} is now in process.\n\n"
+#             f"💰 Your new balance is ${new_balance:.2f}.",
+#             parse_mode="HTML"
+#         )
+
+#     context.user_data.clear()
+#     return ConversationHandler.END
+
+
+
 async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print('handle recharge quantity input entered')
     try:
@@ -743,7 +884,7 @@ async def handle_recharge_quantity_input(update: Update, context: ContextTypes.D
         if qty <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("🚫 Please enter a valid positive number for quantity.")
+        await update.message.reply_text("🚫 Please enter a valid positive number for quantity. \n\n To cancel the operation, type /cancel")
         return SELECT_RECHARGE_QUANTITY
 
     product_id = context.user_data.get("pending_recharge_product_id")
@@ -757,98 +898,130 @@ async def handle_recharge_quantity_input(update: Update, context: ContextTypes.D
     telegram_user = await get_or_create_telegram_user(user_data)
     product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
-    total = product.price * qty
+    # Check if quantity exceeds available stock
+    if qty > product.stock_quantity:
+        await update.message.reply_text(
+            f"🚫 Only <b>{product.stock_quantity}</b> items are available in stock. "
+            f"Please enter a lower quantity.",
+            parse_mode="HTML"
+        )
+        return SELECT_RECHARGE_QUANTITY
+
+    total = product.price * Decimal(qty)
 
     if wallet.balance < total:
         await update.message.reply_text(
             f"💸 Insufficient balance.\n\n"
-            f"💰 Required: ${total}\n"
-            f"🔻 Your Balance: ${wallet.balance}"
+            f"💰 Required: ${total:.2f}\n"
+            f"🔻 Your Balance: ${wallet.balance:.2f}"
         )
         return ConversationHandler.END
 
-    
-    if not product.recharge_description:
-        # 🔁 Use do_purchase_and_vouchers() as-is
-        order, remaining_balance, used_voucher_codes = await do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total)
-        await update.message.reply_text(
-            f"✅ Thank you for your purchase!\n\n"
-            f"• Product: {product.name}\n"
-            f"• Quantity: {qty}\n"
-            f"• Total: ${total:.2f}\n\n"
-            f"🛍️ Your order #{order.id} is now in process.\n\n"
-            f"💰 Your new balance is ${remaining_balance:.2f}.",
-            parse_mode="HTML"
-        )
-    else:
-        # 🔁 Check vouchers and handle Completed order with recharge_description
-        @sync_to_async
-        def complete_recharge_order():
-            with transaction.atomic():
-                available_vouchers = list(
-                    VoucherCode.objects.filter(product=product, is_used=False)[:qty]
-                )
-                print('available vouchers: ', available_vouchers)
-                if len(available_vouchers) < qty:
-                    return None, None, None, "no_voucher"
+    # Store data for confirmation
+    context.user_data["pending_qty"] = qty
+    context.user_data["pending_total"] = total
 
-                wallet.balance -= total
-                wallet.save()
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes", callback_data="confirm_recharge_yes"),
+            InlineKeyboardButton("❌ No", callback_data="confirm_recharge_no"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-                order = Order.objects.create(
-                    user=telegram_user,
-                    total_price=total,
-                    status="Completed"
-                )
+    await update.message.reply_text(
+        f"🔄 <b>Confirm Recharge Purchase</b>\n\n"
+        f"• Product: <b>{product.name}</b>\n"
+        f"• PUBG ID: <b>{pubg_id}</b>\n"
+        f"• Quantity: <b>{qty}</b>\n"
+        f"• Total: <b>${total:.2f}</b>\n"
+        f"• Telegram ID: <code>{user_data.id}</code>",
+        reply_markup=reply_markup,
+        parse_mode="HTML"
+    )
 
-                used_voucher_codes = []
+    return CONFIRM_RECHARGE_PURCHASE
 
-                for i in range(qty):
-                    voucher = available_vouchers[i]
-                    voucher.is_used = True
-                    voucher.save()
 
-                    used_voucher_codes.append(voucher.code)  # <-- collect codes
+# @sync_to_async
+# def do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total):
+#     with transaction.atomic():
+#         wallet.balance -= total
+#         wallet.save()
 
-                    OrderItem.objects.create(
-                        order=order,
-                        product=product,
-                        quantity=1,
-                        unit_price=product.price,
-                        voucher_code=voucher
-                    )
+#         product.stock_quantity -= qty
+#         product.save()
 
-                return order, wallet.balance, used_voucher_codes, None
+#         order = Order.objects.create(
+#             user=telegram_user,
+#             total_price=total,
+#             status="Completed" if product.recharge_description else "Pending"
+#         )
 
-        order, new_balance, used_voucher_codes, error = await complete_recharge_order()
+#         available_vouchers = list(
+#             VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+#         )
 
-        if error == "no_voucher":
-            await update.message.reply_text("⚠️ No voucher is available right now. Please try again later.")
-            return ConversationHandler.END
+#         used_voucher_codes = []
 
-        if used_voucher_codes:
-            voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
-            print('voucher text: ', voucher_text)
-        else:
-            voucher_text = "❌ No voucher code available right now.\n"
+#         for i in range(qty):
+#             voucher = available_vouchers[i] if i < len(available_vouchers) else None
+#             if voucher:
+#                 voucher.is_used = True
+#                 voucher.save()
+#                 used_voucher_codes.append(voucher.code)  # ✅ Fix here
 
-        await update.message.reply_text(
-            f"✅ Thank you for your purchase!\n\n"
-            f"• Product: {product.name}\n"
-            f"• Quantity: {qty}\n"
-            f"• Total: ${total:.2f}\n\n"
-            f"{voucher_text}\n"
-            f"🛍️ Your order #{order.id} is now in process.\n\n"
-            f"💰 Your new balance is ${new_balance:.2f}.",
-            parse_mode="HTML"
-        )
+#             OrderItem.objects.create(
+#                 order=order,
+#                 product=product,
+#                 quantity=1,
+#                 unit_price=product.price,
+#                 voucher_code=voucher
+#             )
 
-    context.user_data.clear()
-    return ConversationHandler.END
+#         return order, wallet.balance, used_voucher_codes
 
 
 @sync_to_async
-def do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total):
+def complete_recharge_order_with_vouchers(user, product, wallet, qty, total):
+    with transaction.atomic():
+        available_vouchers = list(
+            VoucherCode.objects.filter(product=product, is_used=False)[:qty]
+        )
+        if len(available_vouchers) < qty:
+            return None, None, None, "no_voucher"
+
+        wallet.balance -= total
+        wallet.save()
+
+        order = Order.objects.create(
+            user=user,
+            total_price=total,
+            status="Completed",
+        )
+
+        used_voucher_codes = []
+
+        for i in range(qty):
+            voucher = available_vouchers[i]
+            voucher.is_used = True
+            voucher.save()
+
+            used_voucher_codes.append(voucher.code)
+
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=1,
+                unit_price=product.price,
+                voucher_code=voucher
+            )
+
+        return order, wallet.balance, used_voucher_codes, None
+
+
+@sync_to_async
+def complete_recharge_without_description(user, product, wallet, qty, total, pubg_id):
     with transaction.atomic():
         wallet.balance -= total
         wallet.save()
@@ -857,9 +1030,10 @@ def do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total
         product.save()
 
         order = Order.objects.create(
-            user=telegram_user,
+            user=user,
             total_price=total,
-            status="Completed" if product.recharge_description else "Pending"
+            pubg_id=pubg_id,
+            status="Pending"
         )
 
         available_vouchers = list(
@@ -873,17 +1047,74 @@ def do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total
             if voucher:
                 voucher.is_used = True
                 voucher.save()
-                used_voucher_codes.append(voucher.code)  # ✅ Fix here
+                used_voucher_codes.append(voucher.code)
 
             OrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=1,
                 unit_price=product.price,
+                pubg_id=pubg_id,
                 voucher_code=voucher
             )
 
         return order, wallet.balance, used_voucher_codes
+
+
+async def confirm_recharge_purchase_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "confirm_recharge_no":
+        await query.edit_message_text("❌ Purchase canceled.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    telegram_user = await get_or_create_telegram_user(query.from_user)
+    qty = context.user_data.get("pending_qty")
+    total = context.user_data.get("pending_total")
+    product_id = context.user_data.get("pending_recharge_product_id")
+    pubg_id = context.user_data.get("pubg_id")
+
+    if not qty or not total or not product_id or not pubg_id:
+        await query.edit_message_text("❌ Missing purchase information. Please start again.")
+        return ConversationHandler.END
+
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    if product.recharge_description:
+        order, new_balance, used_voucher_codes, error = await complete_recharge_order_with_vouchers(
+            telegram_user, product, wallet, qty, total
+        )
+
+        if error == "no_voucher":
+            await query.edit_message_text("⚠️ No vouchers available right now. Please try again later.")
+            return ConversationHandler.END
+
+    else:
+        order, new_balance, used_voucher_codes = await complete_recharge_without_description(
+            telegram_user, product, wallet, qty, total, pubg_id
+        )
+
+    if used_voucher_codes:
+        voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
+    else:
+        voucher_text = "❌ No voucher code available right now.\n"
+
+    await query.edit_message_text(
+        f"✅ Thank you for your purchase!\n\n"
+        f"• Product: {product.name}\n"
+        f"• PUBG ID: {pubg_id}\n"
+        f"• Quantity: {qty}\n"
+        f"• Total: ${total:.2f}\n\n"
+        f"{voucher_text}\n"
+        f"🛍️ Your order #{order.id} is now in process.\n\n"
+        f"💰 Your new balance is ${new_balance:.2f}.",
+        parse_mode="HTML"
+    )
+
+    context.user_data.clear()
+    return ConversationHandler.END
 
    
         
@@ -1145,6 +1376,7 @@ conv_handler = ConversationHandler(
         TYPING_RECHARGE_PUBG_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
         SELECT_RECHARGE_QUANTITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_recharge_quantity_input)],
         CONFIRM_PURCHASE: [CallbackQueryHandler(handle_purchase_confirmation)],
+        CONFIRM_RECHARGE_PURCHASE: [CallbackQueryHandler(confirm_recharge_purchase_callback)],
     },
     fallbacks=[
         CommandHandler("cancel", cancel),
