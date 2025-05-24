@@ -7,9 +7,16 @@ from unfold.admin import TabularInline
 
 @admin.register(TelegramUser)
 class TelegramUserAdmin(ModelAdmin):
-    list_display = ('id', 'telegram_id', 'username', 'first_name', 'last_name', 'created_at')
+    list_display = (
+        'id', 'telegram_id', 'username', 'first_name', 'last_name',
+        'status_display', 'created_at'
+    )
     search_fields = ('telegram_id', 'username', 'first_name', 'last_name')
     ordering = ('-created_at',)
+
+    @admin.display(description='Status', ordering='created_at')
+    def status_display(self, obj):
+        return "🔴 Blocked" if obj.is_blocked else "🟢 Active"
 
 class SubCategoryInline(TabularInline):
     model = SubCategory

@@ -1,4 +1,5 @@
 import os
+import io
 import django
 from datetime import datetime
 import asyncio
@@ -9,12 +10,13 @@ from django.db import transaction
 from asgiref.sync import sync_to_async
 import websockets
 import json
-from telegram import Bot
+from telegram import Bot, InputFile
 import aiohttp
 from telegram import InlineKeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler, ApplicationBuilder
 from core.models import *  
 from api.bybit_websocket.bybit_ws import bybit_ws_listener
+from core.decorators import block_check
 
 
 # Set up Django
@@ -66,6 +68,7 @@ def get_all_payment_methods():
     return list(PaymentMethod.objects.all().values('id', 'name'))
 
 
+@block_check
 # Start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Register the Telegram user and ensure a Wallet is created
@@ -95,7 +98,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                       "🔘 Choose an option below to get started:",
                                       reply_markup=reply_markup)
 
-
+@block_check
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -303,7 +306,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         
-
+@block_check
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     telegram_user = update.effective_user
@@ -407,8 +410,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("API access is coming soon!")
         
         
-        
-        
+    
+@block_check
 async def handle_amount_input(update, context):
     print('handle input amount entered')
     try:
@@ -546,7 +549,7 @@ async def delete_message_after_delay(bot, chat_id, message_id, delay=20*60):
 
 
 
-
+@block_check
 async def handle_quantity_input(update, context):
     print('handle quantity input for category product entered')
     text = update.message.text.strip()
@@ -619,6 +622,7 @@ async def handle_quantity_input(update, context):
 
 
 
+@block_check
 async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -689,9 +693,12 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
     order, new_balance, assigned_codes = await complete_recharge_order_with_vouchers()
     
     # Notify admin of the completed order
-    await notify_admin_order_completed(context.bot, order, assigned_codes)
+    await notify_admin_order_completed(context.bot, order, assigned_codes, product)
 
-    voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    voucher_text = "\n".join(assigned_codes)
+    file_buffer = io.StringIO(voucher_text)
+    file_buffer.name = f"{product.slug.replace('-', '_')}.txt"
+    
     description = f"\n🧾 <b>Recharge Description:</b>\n<code>{product.recharge_description}</code>" if product.recharge_description else ""
 
     await query.edit_message_text(
@@ -702,8 +709,16 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
         f"💼 New Balance: <b>${new_balance:.2f}</b>\n"
         f"🧾 Order ID: <code>{order.id}</code>"
         f"{description}\n\n"
-        f"🎁 <b>Voucher Codes Assigned:</b>\n{voucher_lines}",
+        f"📄 Voucher codes are attached as a text file.",
         parse_mode="HTML"
+    )
+    
+    # Send attached voucher file
+    file_buffer.seek(0)
+    await context.bot.send_document(
+        caption="🎟️ Your voucher codes",
+        chat_id=query.from_user.id,
+        document=InputFile(file_buffer, filename=file_buffer.name),
     )
 
     context.user_data.clear()
@@ -716,12 +731,16 @@ def get_admin_chat_id():
     return obj.chat_id if obj else None
 
 
-async def notify_admin_order_completed(bot: Bot, order, assigned_codes):
+async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product):
     admin_chat_id = await get_admin_chat_id()
     if not admin_chat_id:
         return  # No admin chat ID set, so don't send
 
-    voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    # voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    voucher_text = "\n".join(assigned_codes)
+    file_buffer = io.StringIO(voucher_text)
+    file_buffer.name = f"{product.slug.replace('-', '_')}.txt"
+    
     message = (
         f"📦 <b>New Completed Order</b>\n\n"
         f"🧑 User: <code>{order.user.telegram_id}</code>\n"
@@ -729,18 +748,34 @@ async def notify_admin_order_completed(bot: Bot, order, assigned_codes):
         f"💲 Total: <b>${order.total_price:.2f}</b>\n"
         f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"✅ Status: <b>{order.status}</b>\n\n"
-        f"🎁 Voucher Codes:\n{voucher_lines}"
+        f"📄 Voucher codes are attached as a text file."
     )
 
-    await bot.send_message(chat_id=admin_chat_id, text=message, parse_mode="HTML")
+    # Send message and attached voucher file in one block
+    await bot.send_message(
+        chat_id=admin_chat_id,
+        text=message,
+        parse_mode="HTML"
+    )
+
+    file_buffer.seek(0)
+    await bot.send_document(
+        chat_id=admin_chat_id,
+        document=InputFile(file_buffer, filename=file_buffer.name),
+        caption="🎁 Voucher Codes"
+    )
     
     
-async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id):
+    
+async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, product):
     admin_chat_id = await get_admin_chat_id()
     if not admin_chat_id:
         return  # No admin chat ID set, so don't send
 
-    voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    voucher_text = "\n".join(assigned_codes)
+    file_buffer = io.StringIO(voucher_text)
+    file_buffer.name = f"{product.slug.replace('-', '_')}.txt"
+    
     message = (
         f"📦 <b>New Completed Order</b>\n\n"
         f"🧑 User: <code>{order.user.telegram_id}</code>\n"
@@ -749,10 +784,21 @@ async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id):
         f"💲 Total: <b>${order.total_price:.2f}</b>\n"
         f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"✅ Status: <b>{order.status}</b>\n\n"
-        f"🎁 Voucher Codes:\n{voucher_lines}"
+        f"📄 Voucher codes are attached as a text file."
     )
 
-    await bot.send_message(chat_id=admin_chat_id, text=message, parse_mode="HTML")
+    await bot.send_message(
+        chat_id=admin_chat_id,
+        text=message,
+        parse_mode="HTML"
+    )
+
+    file_buffer.seek(0)
+    await bot.send_document(
+        chat_id=admin_chat_id,
+        document=InputFile(file_buffer, filename=file_buffer.name),
+        caption="🎁 Voucher Codes"
+    )
 
 
 
@@ -933,6 +979,7 @@ async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id):
 
 
 
+@block_check
 async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print('handle recharge quantity input entered')
     try:
@@ -1117,6 +1164,7 @@ def complete_recharge_without_description(user, product, wallet, qty, total, pub
         return order, wallet.balance, used_voucher_codes
 
 
+@block_check
 async def confirm_recharge_purchase_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1148,7 +1196,7 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
             return ConversationHandler.END
 
         # ✅ Notify admin for completed order
-        await notify_admin_order_completed(context.bot, order, used_voucher_codes)
+        await notify_admin_order_completed(context.bot, order, used_voucher_codes, product)
 
         if used_voucher_codes:
             voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
@@ -1159,7 +1207,7 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
         order, new_balance, used_voucher_codes = await complete_recharge_without_description(
             telegram_user, product, wallet, qty, total, pubg_id
         )
-        await notify_admin_order_pending(context.bot, order, used_voucher_codes, pubg_id)
+        await notify_admin_order_pending(context.bot, order, used_voucher_codes, pubg_id, product)
         voucher_text = ""  # Don't show any voucher message
 
     await query.edit_message_text(
@@ -1187,6 +1235,8 @@ def get_categories():
 def get_recharge_categories():
     return list(RechargeCategory.objects.all().values("id", "name"))
 
+
+@block_check
 async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     categories = await get_categories()
 
@@ -1238,6 +1288,9 @@ def get_wallet_balance(user):
 def get_payment_methods():
     return list(PaymentMethod.objects.filter(is_active=True).values('id', 'name'))
 
+
+
+@block_check
 async def show_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = update.effective_user
     telegram_user = await get_or_create_telegram_user(user_data)
@@ -1328,6 +1381,8 @@ def note_exists(note):
     return BinancePayNote.objects.filter(note=note).exists()
 
 
+
+@block_check
 async def show_wallet_info(chat_id, context, telegram_id):
     user = await get_user_by_telegram_id(telegram_id)
     wallet = await get_wallet_balance(user)
@@ -1352,6 +1407,7 @@ def get_product_and_wallet(user: TelegramUser, product_id: int):
     wallet  = Wallet.objects.get(telegram_user=user)
     return product, wallet
 
+
 @sync_to_async
 def create_order_and_item(user, product, quantity, total_price):
     # Atomic creation of Order + OrderItem
@@ -1368,13 +1424,15 @@ def create_order_and_item(user, product, quantity, total_price):
     return order
     
 
+@block_check
 async def get_user_by_telegram_id(telegram_id: int) -> TelegramUser | None:
     try:
         return await TelegramUser.objects.aget(telegram_id=telegram_id)
     except TelegramUser.DoesNotExist:
         return None
     
-    
+
+@block_check
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END

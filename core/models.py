@@ -8,40 +8,12 @@ from django.core.exceptions import ValidationError
 
 
 
-# class Product(models.Model):
-#     name = models.CharField(max_length=200)
-#     parent = models.ForeignKey(
-#         'self', null=True, blank=True,
-#         related_name='children', on_delete=models.CASCADE
-#     )
-#     # The amount of items or units this product represents (e.g., 26 UC per pack)
-#     unit_quantity = models.PositiveIntegerField(
-#         default=1,
-#         help_text="Number of underlying units per purchase unit"
-#     )
-#     # Price per this product (for the specified unit_quantity)
-#     price = models.DecimalField(
-#         max_digits=10, decimal_places=2,
-#         help_text="Price for the defined unit_quantity"
-#     )
-#     # Available stock in terms of purchase units
-#     stock = models.PositiveIntegerField(
-#         default=0,
-#         help_text="Quantity of purchase units available for sale"
-#     )
-
-#     def is_leaf(self):
-#         """
-#         A product is a leaf if it has no children and has a price defined.
-#         """
-#         return not self.children.exists() and self.price is not
-
-
 class TelegramUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True)  # User ID from Telegram
     username = models.CharField(max_length=150, blank=True, null=True)
     first_name = models.CharField(max_length=150, blank=True, null=True)
     last_name = models.CharField(max_length=150, blank=True, null=True)
+    is_blocked = models.BooleanField(default=False)
     is_bot = models.BooleanField(default=False)
     language_code = models.CharField(max_length=10, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
