@@ -55,10 +55,12 @@ class Category(models.Model):
     slug        = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active   = models.BooleanField(default=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name_plural = 'Categories'
-        ordering = ['name']
+        ordering = ['created_at']
 
     def __str__(self):
         return self.name
@@ -73,10 +75,12 @@ class SubCategory(models.Model):
     slug        = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active   = models.BooleanField(default=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = ('category', 'name')
-        ordering = ['name']
+        ordering = ['created_at']
 
     def __str__(self):
         return f"{self.category.name} → {self.name}"
@@ -87,10 +91,12 @@ class RechargeCategory(models.Model):
     slug        = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active   = models.BooleanField(default=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name_plural = 'Recharge Categories'
-        ordering = ['name']
+        ordering = ['created_at']
 
     def __str__(self):
         return self.name
@@ -146,9 +152,12 @@ class Product(models.Model):
         related_name='products',
         on_delete=models.SET_NULL
     )
+    
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['name']
+        ordering = ['created_at']
 
     def __str__(self):
         return self.name
@@ -259,6 +268,7 @@ class OrderItem(models.Model):
     
 class PaymentMethod(models.Model):
     name = models.CharField(max_length=100, unique=True)
+    uid = models.CharField(max_length=100, blank=True, null=True)
     description = models.TextField(blank=True)
     note = models.TextField(blank=True)  # E.g. “Use memo xyz when sending.”
     address = models.CharField(max_length=255, blank=True)
@@ -309,3 +319,17 @@ class BinancePayNote(models.Model):
     def __str__(self):
         return self.note
     
+
+
+class AdminChatID(models.Model):
+    chat_id = models.CharField(max_length=50)
+    username = models.CharField(max_length=150, blank=True, null=True)
+    name = models.CharField(max_length=150, blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        AdminChatID.objects.all().delete()  # Ensures only one entry exists
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        display_name = self.name or self.username or self.chat_id
+        return f"{display_name} ({self.chat_id})"

@@ -93,13 +93,13 @@ class WalletAdmin(ModelAdmin):
 
 @admin.register(PaymentMethod)
 class PaymentMethodAdmin(ModelAdmin):
-    list_display = ('name', 'is_active', 'address', 'api_base_url')
+    list_display = ('name', 'uid', 'is_active', 'address', 'api_base_url')
     list_filter = ('is_active',)
     search_fields = ('name', 'address', 'note')
     ordering = ('name',)
     fieldsets = (
         (None, {
-            'fields': ('name', 'description', 'note', 'is_active')
+            'fields': ('name', 'uid', 'description', 'note', 'is_active')
         }),
         ('Connection Details', {
             'fields': ('address', 'api_base_url'),
@@ -148,3 +148,14 @@ class UploadVoucherCodeAdmin(admin.ModelAdmin):
             self.message_user(request, f"Error: {str(e)}", level='error')
         else:
             self.message_user(request, "Voucher codes uploaded successfully.")
+            
+            
+@admin.register(AdminChatID)
+class AdminChatIDAdmin(admin.ModelAdmin):
+    list_display = ("chat_id", "username", "name")
+    search_fields = ("chat_id", "username", "name")
+    fieldsets = (
+        (None, {
+            "fields": ("chat_id", "username", "name")
+        }),
+    )

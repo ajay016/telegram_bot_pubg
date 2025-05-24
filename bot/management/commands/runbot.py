@@ -90,7 +90,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("🏬 Welcome to MSNFAMER-E-STORE Bot!\n\n"
+    await update.message.reply_text("🏬 Welcome to MSNGAMER-E-STORE Bot!\n\n"
                                       "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
                                       "🔘 Choose an option below to get started:",
                                       reply_markup=reply_markup)
@@ -148,7 +148,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await query.edit_message_text("No products found in this category.")
 
         keyboard = [
-            [InlineKeyboardButton(p.name, callback_data=f"recharge_product_{p.id}")]
+            [InlineKeyboardButton(f"{p.name} | ${p.price} | {p.stock_quantity}", callback_data=f"recharge_product_{p.id}")]
             for p in products
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="game_id_recharge_auto")])
@@ -238,9 +238,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # Create transaction (if needed)
             transaction = await create_topup_transaction(user.id, method_id, note)
-
+            uid_display = method["uid"] if method.get("api_base_url") else "N/A"
             text = (
-                f"🪪 <b>UID:</b> <code>123456789</code> (Tap to copy)\n\n"
+                f"🪪 <b>UID:</b> <code>{uid_display}</code> (Tap to copy)\n\n"
                 f"💸 Please send your desired amount to this UID and include the note below:\n\n"
                 f"📝 <b>Note:</b> <code>{note}</code>\n\n"
                 f"⚠️ <b>Please send only</b> <code>USDT</code>. After paying, click the ✅ <b>I have paid</b> button.\n\n"
@@ -395,7 +395,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #     await update.message.reply_text("Please send your Game ID to proceed.")
 
     elif "Contact Support" in text:
-        await update.message.reply_text("Contact us at support@example.com.")
+        await update.message.reply_text(
+            "📞 We're here to help! If you have any questions or need assistance, please choose an option below:\n\n"
+            "🔹 Contact Support: Reach out to our support team directly.\n"
+            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msn_gamer).\n\n"
+            "✨ Feel free to ask anything!",
+            parse_mode="Markdown"
+        )
 
     elif "API" in text:
         await update.message.reply_text("API access is coming soon!")
@@ -658,7 +664,8 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 
             order = Order.objects.create(
                 user=telegram_user,
-                total_price=total
+                total_price=total,
+                status="Completed"
             )
 
             assigned_codes = []
@@ -680,6 +687,9 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
             return order, wallet.balance, assigned_codes
 
     order, new_balance, assigned_codes = await complete_recharge_order_with_vouchers()
+    
+    # Notify admin of the completed order
+    await notify_admin_order_completed(context.bot, order, assigned_codes)
 
     voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
     description = f"\n🧾 <b>Recharge Description:</b>\n<code>{product.recharge_description}</code>" if product.recharge_description else ""
@@ -698,6 +708,52 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 
     context.user_data.clear()
     return ConversationHandler.END
+
+
+@sync_to_async
+def get_admin_chat_id():
+    obj = AdminChatID.objects.first()
+    return obj.chat_id if obj else None
+
+
+async def notify_admin_order_completed(bot: Bot, order, assigned_codes):
+    admin_chat_id = await get_admin_chat_id()
+    if not admin_chat_id:
+        return  # No admin chat ID set, so don't send
+
+    voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    message = (
+        f"📦 <b>New Completed Order</b>\n\n"
+        f"🧑 User: <code>{order.user.telegram_id}</code>\n"
+        f"🆔 Order ID: <code>{order.id}</code>\n"
+        f"💲 Total: <b>${order.total_price:.2f}</b>\n"
+        f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"✅ Status: <b>{order.status}</b>\n\n"
+        f"🎁 Voucher Codes:\n{voucher_lines}"
+    )
+
+    await bot.send_message(chat_id=admin_chat_id, text=message, parse_mode="HTML")
+    
+    
+async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id):
+    admin_chat_id = await get_admin_chat_id()
+    if not admin_chat_id:
+        return  # No admin chat ID set, so don't send
+
+    voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
+    message = (
+        f"📦 <b>New Completed Order</b>\n\n"
+        f"🧑 User: <code>{order.user.telegram_id}</code>\n"
+        f"🧑 <b>Game ID:</b> <code>{game_id}</code>\n"
+        f"🆔 Order ID: <code>{order.id}</code>\n"
+        f"💲 Total: <b>${order.total_price:.2f}</b>\n"
+        f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"✅ Status: <b>{order.status}</b>\n\n"
+        f"🎁 Voucher Codes:\n{voucher_lines}"
+    )
+
+    await bot.send_message(chat_id=admin_chat_id, text=message, parse_mode="HTML")
+
 
 
 
@@ -1091,15 +1147,20 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
             await query.edit_message_text("⚠️ No vouchers available right now. Please try again later.")
             return ConversationHandler.END
 
+        # ✅ Notify admin for completed order
+        await notify_admin_order_completed(context.bot, order, used_voucher_codes)
+
+        if used_voucher_codes:
+            voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
+        else:
+            voucher_text = "❌ No voucher code available right now.\n"
+
     else:
         order, new_balance, used_voucher_codes = await complete_recharge_without_description(
             telegram_user, product, wallet, qty, total, pubg_id
         )
-
-    if used_voucher_codes:
-        voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
-    else:
-        voucher_text = "❌ No voucher code available right now.\n"
+        await notify_admin_order_pending(context.bot, order, used_voucher_codes, pubg_id)
+        voucher_text = ""  # Don't show any voucher message
 
     await query.edit_message_text(
         f"✅ Thank you for your purchase!\n\n"
@@ -1107,7 +1168,7 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
         f"• PUBG ID: {pubg_id}\n"
         f"• Quantity: {qty}\n"
         f"• Total: ${total:.2f}\n\n"
-        f"{voucher_text}\n"
+        f"{voucher_text}"
         f"🛍️ Your order #{order.id} is now in process.\n\n"
         f"💰 Your new balance is ${new_balance:.2f}.",
         parse_mode="HTML"
@@ -1200,6 +1261,7 @@ def get_payment_method_info(method_id):
         method = PaymentMethod.objects.get(id=method_id)
         return {
             "id": method.id,
+            'uid': method.uid,
             "name": method.name,
             "description": method.description,
             "address": method.address,
@@ -1452,5 +1514,10 @@ class Command(BaseCommand):
 
         print("🤖 Bot is running...")
         application.run_polling()
+        
+
+
+
+
 
 
