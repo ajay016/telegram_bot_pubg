@@ -3,3 +3,5 @@ binance_address.txt
 binance_keys.txt
 bybit_api_keys.txt
 venv/
+.env
+env
