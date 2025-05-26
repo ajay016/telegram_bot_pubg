@@ -4,6 +4,7 @@ binance_keys.txt
 bybit_api_keys.txt
 /vscode
 .vscode/
+.vscode
 .idea/
 venv/
 .env
