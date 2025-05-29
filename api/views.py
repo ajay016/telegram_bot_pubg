@@ -7,6 +7,8 @@ from rest_framework import status
 from core.models import Product, Wallet, Order
 from .serializers import *
 from .utils.binance_client import binance_signed_request
+from datetime import datetime, timedelta
+
 
 # class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 #     queryset = Product.objects.all()
@@ -258,39 +260,39 @@ class ConfirmTopUpView(APIView):
             return Response({"detail": "⏰ This payment session has expired."}, status=status.HTTP_410_GONE)
 
         note = (transaction.note or '').strip()
-        created_at = int(transaction.created_at.timestamp() * 1000)
-
+        created_at = int(transaction.created_at.timestamp() * 1000) 
+        
+        
         try:
             tx_data = binance_signed_request("/sapi/v1/pay/transactions", {"startTime": created_at, "limit": 50})
         except Exception as e:
             return Response({"detail": "❌ Binance API error."}, status=status.HTTP_502_BAD_GATEWAY)
 
-        print('tx_data: ', tx_data)
-        for tx in tx_data.get("data", []):
-            remark = (tx.get("remark") or '').strip()
-            if (
-                remark == note
-                and tx.get("currency") == "USDT"
-                and tx.get("status", "").lower() == "success"
-            ):
-                amount = Decimal(tx["amount"])
-                wallet, _ = Wallet.objects.get_or_create(user=transaction.user)
-                wallet.balance += amount
-                wallet.save()
+        print('tx_data in api view: ', tx_data)
+        if tx_data['message'].lower() == 'success':
+            for tx in tx_data.get("data", []):
+                remark = (tx.get("note") or '').strip() 
+                if (
+                    remark == note
+                    and tx.get("currency") == "USDT"
+                ):
+                    amount = Decimal(tx["amount"])
+                    wallet, _ = Wallet.objects.get_or_create(telegram_user=transaction.user)
+                    wallet.balance += amount
+                    wallet.save()
 
-                transaction.amount_received = amount
-                transaction.status = "confirmed"
-                transaction.save()
+                    transaction.amount_received = amount
+                    transaction.status = "confirmed"
+                    transaction.save()
 
-                BinancePayNote.objects.filter(note=note).update(is_used=True)
+                    BinancePayNote.objects.filter(note=note).update(is_used=True)
 
-                return Response({
-                    "success": True,
-                    "amount": f"{amount:.2f}",
-                    "balance": f"{wallet.balance:.2f}",
-                    "telegram_id": transaction.user.telegram_id,
-                })
+                    return Response({
+                        "success": True,
+                        "amount": f"{amount:.2f}",
+                        "balance": f"{wallet.balance:.2f}",
+                        "telegram_id": transaction.user.telegram_id,
+                    })
         
-        
-        print("now payament transaction found")
         return Response({"detail": "❌ No matching Binance transaction found."}, status=status.HTTP_404_NOT_FOUND)
+

@@ -40,6 +40,7 @@ def binance_signed_request(endpoint: str, params: dict) -> dict:
     try:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
+        print('response from binance: ', response.json())
         return response.json()
     except RequestException as e:
         # Log full response content if available

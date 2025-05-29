@@ -19,7 +19,7 @@ class TelegramUser(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.telegram_id} ({self.username})"
+        return f"{self.telegram_id}"
 
 
 class Category(models.Model):
@@ -149,6 +149,13 @@ class Product(models.Model):
         else:
             if not self.recharge_description:
                 raise ValidationError('Non-recharge products must have a recharge description.')
+            
+    
+    def update_stock_from_vouchers(self):
+        count = self.vouchers.filter(is_used=False).count()
+        self.stock_quantity = count
+        self.in_stock = count > 0
+        self.save(update_fields=['stock_quantity', 'in_stock'])
     
 
 
@@ -218,6 +225,8 @@ class UploadVoucherCode(models.Model):
         # Save voucher codes
         for code in valid_lines:
             VoucherCode.objects.get_or_create(code=code, product=self.product)
+            
+        self.product.update_stock_from_vouchers()  # Update stock after processing
     
 
 class OrderItem(models.Model):
@@ -261,7 +270,7 @@ class TopUpTransaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
-        return timezone.now() > self.created_at + timedelta(minutes=30)
+        return timezone.now() > self.created_at + timedelta(minutes=60)
     
     
 class PaymentTransaction(models.Model):

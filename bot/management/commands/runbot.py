@@ -300,6 +300,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_wallet_info(chat_id, context, telegram_id=data["telegram_id"])
 
         else:
+            print('binance data: ', data)
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=data.get("detail", "❌ Payment confirmation failed.")

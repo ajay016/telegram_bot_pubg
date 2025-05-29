@@ -28,9 +28,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-r9ul9+#!rm*@lb!iiohc1rwawgacml%j0sg(y1bz*2e208c--a'
-# BOT_TOKEN = '8156115400:AAESiwQMq4jgDc_ou4UAijD2kNNVmlvjIFA'
-BOT_TOKEN = '7277573243:AAHJBQhgXcW5akG3UB84r7uNh7mctWEiUv8'
-BOT_API_BASE_URL = "http://zohaibe.com/"
+BOT_TOKEN = '8156115400:AAESiwQMq4jgDc_ou4UAijD2kNNVmlvjIFA'
+# BOT_TOKEN = '7277573243:AAHJBQhgXcW5akG3UB84r7uNh7mctWEiUv8'
+BOT_API_BASE_URL = "http://127.0.0.1:8000"
 
 BYBIT_API_SECRET = "xGaErbycDwdOxpMv2lHCPdHZKKsHrgTIyVHc"
 BYBIT_API_KEY = "gVAhSlNc1yCe2A0UlT"

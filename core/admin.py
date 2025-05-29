@@ -85,10 +85,14 @@ class OrderItemAdmin(ModelAdmin):
 
 @admin.register(VoucherCode)
 class VoucherCodeAdmin(ModelAdmin):
-    list_display = ('code', 'product', 'is_used', 'created_at')
+    list_display = ('code', 'product', 'usage_status', 'created_at')
     list_filter = ('is_used', 'created_at')
     search_fields = ('code',)
     autocomplete_fields = ('product',)
+
+    def usage_status(self, obj):
+        return "🔴 Used" if obj.is_used else "🟢 Available"
+    usage_status.short_description = "Status"
 
 
 @admin.register(Wallet)
