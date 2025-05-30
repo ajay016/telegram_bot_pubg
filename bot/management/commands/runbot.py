@@ -305,6 +305,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat_id,
                 text=data.get("detail", "❌ Payment confirmation failed.")
             )
+            
+    return ConversationHandler.END
 
         
 @block_check
@@ -330,8 +332,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "Browse Products" in text:
         await show_categories(update, context)
         
+        return True
+        
     if "Game ID Recharge" in text:
         await show_recharge_categories(update, context)
+        
+        return True
 
     elif "My Wallet" in text:
         # Fetch wallet and user data
@@ -388,12 +394,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="HTML"
         )
+        
+        return True
 
     elif "My Orders" in text:
         await update.message.reply_text("Your orders will show here.")
+        return True
 
     elif "Leaderboard" in text:
         await update.message.reply_text("Here's the leaderboard.")
+        
+        return True
 
     # elif "Game ID Recharge (Auto)" in text:
     #     await update.message.reply_text("Please send your Game ID to proceed.")
@@ -406,15 +417,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✨ Feel free to ask anything!",
             parse_mode="Markdown"
         )
+        
+        return True
 
     elif "API" in text:
         await update.message.reply_text("API access is coming soon!")
+        
+        return True
+        
         
         
     
 @block_check
 async def handle_amount_input(update, context):
-    print('handle input amount entered')
+    # First check if it's a general command like "Wallet", "Browse Products", etc.
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END  # ✅ early exit if handled
+    
     try:
         amount = float(update.message.text.strip())
         print('entered amount: ', amount)
@@ -552,7 +572,10 @@ async def delete_message_after_delay(bot, chat_id, message_id, delay=20*60):
 
 @block_check
 async def handle_quantity_input(update, context):
-    print('handle quantity input for category product entered')
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END  # ✅ early exit if handled
+    
     text = update.message.text.strip()
 
     user_data = update.effective_user
@@ -982,7 +1005,10 @@ async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, p
 
 @block_check
 async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print('handle recharge quantity input entered')
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END  # ✅ early exit if handled
+    
     try:
         qty = int(update.message.text)
         if qty <= 0:
@@ -1574,9 +1600,3 @@ class Command(BaseCommand):
         print("🤖 Bot is running...")
         application.run_polling()
         
-
-
-
-
-
-
