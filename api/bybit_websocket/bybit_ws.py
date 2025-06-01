@@ -531,10 +531,8 @@ async def fetch_transactions(start_time_ms):
         # )
         
         response = session.get_internal_deposit_records(
-            # accountType="FUND",
             coin="USDT",
             startTime=start_time_ms
-            # memberId=592324,
         )
 
         print(f"📥 Raw API Response: {response}")
@@ -568,7 +566,7 @@ async def wait_for_matching_transaction(amount, user_id, bot, chat_id, message_i
     await asyncio.sleep(initial_delay)
 
     # start_time_ms = int((time.time() - initial_delay) * 1000)
-    start_time_ms = int((time.time()) * 1000)
+    start_time_ms = int((time.time()) * 1000 - 1000 * 60 * 60 * 24)
     print(f"⏱️ Using startTime = {start_time_ms} ({datetime.utcfromtimestamp(start_time_ms / 1000)})")
 
     start = time.time()
@@ -608,8 +606,14 @@ async def wait_for_matching_transaction(amount, user_id, bot, chat_id, message_i
                 payment = await sync_to_async(
                     lambda: PaymentTransaction.objects.filter(user=user_id, status='pending').latest('created_at')
                 )()
-                topup = payment.topup_transaction
-                tx_id = tx.get("txID", f"{tx['amount']}_{int(time.time())}")  # fallback ID
+                topup = await sync_to_async(lambda: payment.topup_transaction)()
+                # tx_id = tx.get("txID", f"{tx['amount']}_{int(time.time())}")  # fallback ID
+                
+                timestamp = int(time.time())
+                formatted_amount = str(amount).replace('.', '')  # remove decimal point for clean ID
+                generated_tx_id = f"{payment.id}{formatted_amount}{timestamp}"
+                
+                tx_id = tx.get("txID", generated_tx_id)
 
                 # Check if already processed
                 already_processed = await sync_to_async(PaymentTransaction.objects.filter(tx_id=tx_id).exists)()

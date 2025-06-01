@@ -267,6 +267,7 @@ class TopUpTransaction(models.Model):
     note = models.CharField(max_length=64, unique=True, blank=True, null=True)
     amount_received = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('confirmed', 'Confirmed')], default='pending')
+    tx_id = models.CharField(max_length=30, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
@@ -281,6 +282,7 @@ class PaymentTransaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     note = models.CharField(max_length=255, null=True, blank=True)
     tx_id = models.CharField(max_length=128, null=True, blank=True, unique=True)
+    transaction_id = models.CharField(max_length=30, blank=True, null=True)
     status = models.CharField(max_length=20, choices=[
         ('pending', 'Pending'),
         ('completed', 'Completed'),

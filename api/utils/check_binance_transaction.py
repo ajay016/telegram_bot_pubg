@@ -10,7 +10,7 @@ async def confirm_binance_payment(user, note):
     except BinancePayNote.DoesNotExist:
         return None  # Already used or invalid note
 
-    created_at = int(note_obj.created_at.timestamp() * 1000)
+    created_at = int(note_obj.created_at.timestamp() * 1000)  # 30 days ago
 
     # Fetch transactions after note was created
     params = {
@@ -18,7 +18,7 @@ async def confirm_binance_payment(user, note):
         "limit": 50  # Optional
     }
     data = binance_signed_request("/sapi/v1/pay/transactions", params)
-    print('data from binance: ', data)
+    print('data from binance***********************: ', data)
     
     # Check each transaction
     for tx in data.get("data", []):
