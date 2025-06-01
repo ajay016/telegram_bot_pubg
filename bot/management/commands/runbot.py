@@ -15,7 +15,7 @@ import aiohttp
 from telegram import InlineKeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters, ConversationHandler, ApplicationBuilder
 from core.models import *  
-from api.bybit_websocket.bybit_ws import bybit_ws_listener
+from api.bybit_websocket.bybit_ws import bybit_ws_listener, bybit_transaction_listener, wait_for_matching_transaction, update_wallet_balance
 from core.decorators import block_check
 
 
@@ -76,8 +76,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [
-            InlineKeyboardButton("🛍️ Browse Products", callback_data="browse_products"),
-            InlineKeyboardButton("👛 My Wallet", callback_data="my_wallet")
+            InlineKeyboardButton("🛒 Browse Products", callback_data="browse_products"),
+            InlineKeyboardButton("💳 My Wallet", callback_data="my_wallet")
         ],
         [
             InlineKeyboardButton("📦 My Orders", callback_data="my_orders"),
@@ -242,13 +242,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Create transaction (if needed)
             transaction = await create_topup_transaction(user.id, method_id, note)
             uid_display = method["uid"] if method.get("api_base_url") else "N/A"
-            text = (
-                f"🪪 <b>UID:</b> <code>{uid_display}</code> (Tap to copy)\n\n"
-                f"💸 Please send your desired amount to this UID and include the note below:\n\n"
-                f"📝 <b>Note:</b> <code>{note}</code>\n\n"
-                f"⚠️ <b>Please send only</b> <code>USDT</code>. After paying, click the ✅ <b>I have paid</b> button.\n\n"
-                f"🔴 <i>Note: This will be valid for only 30 minutes</i>"
-            )
+            name =method["name"] if method.get("api_base_url") else "N/A"
+            
+            if "bep" in method["name"].lower():
+                uid_display = method["address"] if method.get("api_base_url") else "N/A"
+                text = (
+                    f"💸 Kindly deposit your desired amount on {name}\n\n"
+                    f"🪪 <b>Address:</b> <code>{uid_display}</code> (Tap to copy)\n\n"
+                    f"💸 Please send your desired amount to this UID and include the note below:\n\n"
+                    f"📝 <b>Note:</b> <code>{note}</code>\n\n"
+                    f"⚠️ <b>Please send only</b> <code>USDT</code>. After paying, click the ✅ <b>I have paid</b> button.\n\n"
+                    f"🔴 <i>Note: This will be valid for only 30 minutes</i>"
+                )
+            else:
+                uid_display = method["uid"] if method.get("api_base_url") else "N/A"
+                text = (
+                    f"💸 Kindly deposit your desired amount on {name}\n\n"
+                    f"🪪 <b>UID:</b> <code>{uid_display}</code> (Tap to copy)\n\n"
+                    f"💸 Please send your desired amount to this UID and include the note below:\n\n"
+                    f"📝 <b>Note:</b> <code>{note}</code>\n\n"
+                    f"⚠️ <b>Please send only</b> <code>USDT</code>. After paying, click the ✅ <b>I have paid</b> button.\n\n"
+                    f"🔴 <i>Note: This will be valid for only 30 minutes</i>"
+                )
 
             keyboard = [[InlineKeyboardButton("✅ I have paid", callback_data=f"confirm_{transaction.id}")]]
             await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
@@ -262,7 +277,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📌 Example: 40.00\n\n"
                 f"📝 If you want to cancel the operation send /cancel"
             )
-            await query.edit_message_text(text)
+            message = await query.edit_message_text(text)
+
+            
+            # ⏳ Schedule deletion after 20 minutes (1200 seconds)
+            asyncio.create_task(
+                delete_message_after_delay(context.bot, query.message.chat_id, message.message_id, delay=1200)
+            )
             
             # 🚀 Tell the ConversationHandler to wait for amount input next
             return AMOUNT_INPUT
@@ -378,7 +399,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = []
         row = []
         for i, method in enumerate(payment_methods, start=1):
-            row.append(InlineKeyboardButton(f"💳 {method['name']}", callback_data=f"pm_{method['id']}"))
+            row.append(InlineKeyboardButton(f"{method['name']}", callback_data=f"pm_{method['id']}"))
             if i % 2 == 0:
                 keyboard.append(row)
                 row = []
@@ -453,26 +474,48 @@ async def handle_amount_input(update, context):
     transaction = await create_topup_transaction(user.id, method["id"], note=None)
     payment = await create_payment_transaction(user.id, method["id"], amount, transaction.id)
 
+    created_at = payment.created_at
+    start_time_ms = int(created_at.timestamp() * 1000)
     
 
-    msg = (
-        f"✅ Kindly deposit exactly <b>{amount:.2f} USDT (BYBIT)</b> to the address below:\n\n"
-        f" 💼 <code>{method['address']}</code>\n\n"
-        f" ⏰ This invoice will expire in 20 minutes.\n\n"
-        f" ⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
-        f" 🕑 This message will be deleted after 20 minutes. 🗑️"
-    )
+    if  "bybit" in method['name'].lower():
+        msg = (
+            f"✅ Kindly deposit exactly <b>{amount:.2f} USDT ({method['name']})</b> to the UID below:\n\n"
+            f"💼 UID: <code>{method['uid']}</code>\n\n"
+            f"⏰ This invoice will expire in 20 minutes.\n\n"
+            f"⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
+            f"🕑 This message will be deleted after 20 minutes. 🗑️"
+        )
+        
+    else:
+        msg = (
+            f"✅ Kindly deposit exactly <b>{amount:.2f} USDT ({method['name']})</b> to the Address below:\n\n"
+            f"💼 Address: <code>{method['address']}</code>\n\n"
+            f"⏰ This invoice will expire in 20 minutes.\n\n"
+            f"⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
+            f"🕑 This message will be deleted after 20 minutes. 🗑️"
+        )
     sent = await update.message.reply_text(msg, parse_mode="HTML")
 
-    # Schedule message deletion
+    # Schedule deletion after 20 mins
+    asyncio.create_task(delete_message_after_delay(context.bot, update.effective_chat.id, sent.message_id))
+
+    # Monitor for transaction
     asyncio.create_task(
-        delete_message_after_delay(
-            context.bot, 
-            update.effective_chat.id, 
-            sent.message_id
+        wait_for_matching_transaction(
+            amount,
+            user,
+            context.bot,
+            update.effective_chat.id,
+            sent.message_id,
+            start_time_ms,
+            method_name=method["name"]
         )
     )
+
     return ConversationHandler.END
+
+
 
 async def delete_message_after_delay(bot, chat_id, message_id, delay=20*60):
     await asyncio.sleep(delay)
@@ -1588,11 +1631,18 @@ class Command(BaseCommand):
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+        # async def post_init(app):
+        #     # Set commands
+        #     await set_commands(app)
+        #     # Start the WebSocket listener in background
+        #     asyncio.create_task(bybit_ws_listener())
+        #     print("🌐 WebSocket listener started")
+        
         async def post_init(app):
             # Set commands
             await set_commands(app)
             # Start the WebSocket listener in background
-            asyncio.create_task(bybit_ws_listener())
+            # asyncio.create_task(bybit_transaction_listener())
             print("🌐 WebSocket listener started")
 
         application.post_init = post_init

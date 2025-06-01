@@ -280,6 +280,7 @@ class PaymentTransaction(models.Model):
     topup_transaction = models.ForeignKey(TopUpTransaction, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     note = models.CharField(max_length=255, null=True, blank=True)
+    tx_id = models.CharField(max_length=128, null=True, blank=True, unique=True)
     status = models.CharField(max_length=20, choices=[
         ('pending', 'Pending'),
         ('completed', 'Completed'),
