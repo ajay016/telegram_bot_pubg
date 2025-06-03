@@ -39,6 +39,10 @@ CONFIRM_PURCHASE = range(6, 7)
 CONFIRM_RECHARGE_PURCHASE = 8
 
 
+
+def normalize_amount(val):
+    return str(Decimal(val).normalize())
+
 @sync_to_async
 def get_or_create_telegram_user(user_data):
     user, created = TelegramUser.objects.get_or_create(
@@ -135,8 +139,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not products:
             await query.edit_message_text("No products found in this category.")
             return
+        
+        def format_price(value):
+            return str(Decimal(value).normalize())
+        
         keyboard = [
-            [InlineKeyboardButton(f"{prod['name']} | ${prod['price']} | {prod['stock_quantity']}", callback_data=f"prod_{prod['id']}")]
+            [InlineKeyboardButton(f"{prod['name']} | ${format_price(prod['price'])} | {prod['stock_quantity']}", callback_data=f"prod_{prod['id']}")]
             for prod in products
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="browse_products")])
@@ -165,10 +173,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("Product not found.")
             return
 
+        price = Decimal(product['price']).normalize()
+        
         text = (
             f"🛍️ <b>{product['name']}</b>\n\n"
             f"📝 Description: {product['description']}\n"
-            f"💰 Price: ${product['price']}\n"
+            f"💰 Price: ${price}\n"
             f"📦 Stock: {product['stock_quantity']} available"
         )
 
@@ -308,12 +318,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data = await resp.json()
 
         if resp.status == 200 and data.get("success"):
+            amount = normalize_amount(data['amount'])
+            balance = normalize_amount(data['balance'])
+    
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=(
                     f"✅ <b>Payment received successfully!</b>\n\n"
-                    f"💰 <b>${data['amount']}</b> has been added to your wallet.\n"
-                    f"💼 <b>New Balance:</b> <code>${data['balance']}</code>"
+                    f"💰 <b>${amount}</b> has been added to your wallet.\n"
+                    f"💼 <b>New Balance:</b> <code>${balance}</code>"
                 ),
                 parse_mode="HTML"
             )
@@ -386,7 +399,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👛 <b>Wallet Information</b>:\n\n"
             f"Hello, <b>{display_name}</b>! Your wallet balance as of <i>{current_date}</i>:\n\n"
             f"🆔 <b>Telegram ID:</b> <code>{telegram_id}</code>\n"
-            f"💰 <b>Current Balance:</b> <code>${balance:.2f}</code>\n\n"
+            f"💰 <b>Current Balance:</b> <code>${normalize_amount(balance)}</code>\n\n"
             f"✨ Would you like to top up your wallet? Use one of the following methods:"
         )
 
@@ -480,7 +493,7 @@ async def handle_amount_input(update, context):
 
     if  "bybit" in method['name'].lower():
         msg = (
-            f"✅ Kindly deposit exactly <b>{amount:.2f} USDT ({method['name']})</b> to the UID below:\n\n"
+            f"✅ Kindly deposit exactly <b>{normalize_amount(amount)} USDT ({method['name']})</b> to the UID below:\n\n"
             f"💼 UID: <code>{method['uid']}</code>\n\n"
             f"⏰ This invoice will expire in 20 minutes.\n\n"
             f"⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
@@ -489,7 +502,7 @@ async def handle_amount_input(update, context):
         
     else:
         msg = (
-            f"✅ Kindly deposit exactly <b>{amount:.2f} USDT ({method['name']})</b> to the Address below:\n\n"
+            f"✅ Kindly deposit exactly <b>{normalize_amount(amount)} USDT ({method['name']})</b> to the Address below:\n\n"
             f"💼 Address: <code>{method['address']}</code>\n\n"
             f"⏰ This invoice will expire in 20 minutes.\n\n"
             f"⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
@@ -658,7 +671,7 @@ async def handle_quantity_input(update, context):
     # Check balance
     if wallet.balance < total:
         await update.message.reply_text(
-            f"❌ You need ${total:.2f} but your balance is only ${wallet.balance:.2f}."
+            f"❌ You need ${normalize_amount(total)} but your balance is only ${normalize_amount(wallet.balance)}."
         )
         return ConversationHandler.END
 
@@ -679,7 +692,7 @@ async def handle_quantity_input(update, context):
         f"🛒 <b>Confirm your purchase</b>\n\n"
         f"• Product: <b>{product.name}</b>\n"
         f"• Quantity: <b>{qty}</b>\n"
-        f"• Total Price: <b>${total:.2f}</b>\n"
+        f"• Total Price: <b>${normalize_amount(total)}</b>\n"
         f"• Telegram ID: <code>{user_data.id}</code>",
         reply_markup=reply_markup,
         parse_mode="HTML"
@@ -772,7 +785,7 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
         f"✅ <b>Thank you for your purchase!</b>\n\n"
         f"🛒 Product: <b>{product.name}</b>\n"
         f"🔢 Quantity: <b>{qty}</b>\n"
-        f"💲 Total: <b>${total:.2f}</b>\n"
+        f"💲 Total: <b>${normalize_amount(total)}</b>\n"
         f"💼 New Balance: <b>${new_balance:.2f}</b>\n"
         f"🧾 Order ID: <code>{order.id}</code>"
         f"{description}\n\n"
@@ -812,7 +825,7 @@ async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product)
         f"📦 <b>New Completed Order</b>\n\n"
         f"🧑 User: <code>{order.user.telegram_id}</code>\n"
         f"🆔 Order ID: <code>{order.id}</code>\n"
-        f"💲 Total: <b>${order.total_price:.2f}</b>\n"
+        f"💲 Total: <b>${normalize_amount(order.total_price)}</b>\n"
         f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"✅ Status: <b>{order.status}</b>\n\n"
         f"📄 Voucher codes are attached as a text file."
@@ -848,7 +861,7 @@ async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, p
         f"🧑 User: <code>{order.user.telegram_id}</code>\n"
         f"🧑 <b>Game ID:</b> <code>{game_id}</code>\n"
         f"🆔 Order ID: <code>{order.id}</code>\n"
-        f"💲 Total: <b>${order.total_price:.2f}</b>\n"
+        f"💲 Total: <b>${normalize_amount(order.total_price)}</b>\n"
         f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"✅ Status: <b>{order.status}</b>\n\n"
         f"📄 Voucher codes are attached as a text file."
@@ -868,181 +881,6 @@ async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, p
     )
 
 
-
-
-# Handle the input for recharge product
-# async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     try:
-#         quantity = int(update.message.text)
-#         if quantity <= 0:
-#             raise ValueError
-#     except ValueError:
-#         await update.message.reply_text("🚫 Please enter a valid positive number for quantity.")
-#         return SELECT_RECHARGE_QUANTITY
-
-#     product_id = context.user_data.get("pending_recharge_product_id")
-#     pubg_id = context.user_data.get("pubg_id")
-
-#     if not product_id or not pubg_id:
-#         await update.message.reply_text("❌ Missing product or PUBG ID. Please start again.")
-#         return ConversationHandler.END
-
-#     # Fetch product and user from DB
-#     # product = await sync_to_async(Product.objects.get)(id=product_id)
-#     user_data     = update.effective_user
-#     telegram_user = await get_or_create_telegram_user(user_data)
-    
-#     product, wallet = await get_product_and_wallet(telegram_user, product_id)
-
-#     total_price = product.price * quantity
-
-#     # Check wallet balance
-#     if wallet.balance < total_price:
-#         await update.message.reply_text(
-#             f"💸 Insufficient balance.\n\n"
-#             f"💰 Required: ${total_price}\n"
-#             f"🔻 Your Balance: ${wallet.balance}"
-#         )
-#         return ConversationHandler.END
-
-#     # Deduct wallet balance
-#     wallet.balance -= total_price
-#     await sync_to_async(wallet.save)()
-
-#     # Determine order status
-#     status = "Completed" if product.recharge_description else "Pending"
-
-#     # Create the order
-#     order = await sync_to_async(Order.objects.create)(
-#         user=telegram_user,
-#         total_price=total_price,
-#         status=status,
-#     )
-
-#     # Clear temporary context data
-#     context.user_data.clear()
-
-#     await update.message.reply_text(
-#         f"✅ Order placed successfully!\n\n"
-#         f"📦 Product: {product.name}\n"
-#         f"🆔 PUBG ID: {pubg_id}\n"
-#         f"🔢 Quantity: {quantity}\n"
-#         f"💰 Total: ${total_price}\n"
-#         f"💼 Wallet Balance Remaining: ${wallet.balance}\n"
-#         f"📝 Status: {status}"
-#     )
-#     return ConversationHandler.END
-
-
-# async def handle_recharge_quantity_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-#     print('handle recharge quantity input entered')
-#     try:
-#         qty = int(update.message.text)
-#         if qty <= 0:
-#             raise ValueError
-#     except ValueError:
-#         await update.message.reply_text("🚫 Please enter a valid positive number for quantity.")
-#         return SELECT_RECHARGE_QUANTITY
-
-#     product_id = context.user_data.get("pending_recharge_product_id")
-#     pubg_id = context.user_data.get("pubg_id")
-
-#     if not product_id or not pubg_id:
-#         await update.message.reply_text("❌ Missing product or PUBG ID. Please start again.")
-#         return ConversationHandler.END
-
-#     user_data = update.effective_user
-#     telegram_user = await get_or_create_telegram_user(user_data)
-#     product, wallet = await get_product_and_wallet(telegram_user, product_id)
-
-#     total = product.price * qty
-
-#     if wallet.balance < total:
-#         await update.message.reply_text(
-#             f"💸 Insufficient balance.\n\n"
-#             f"💰 Required: ${total}\n"
-#             f"🔻 Your Balance: ${wallet.balance}"
-#         )
-#         return ConversationHandler.END
-
-    
-#     if not product.recharge_description:
-#         # 🔁 Use do_purchase_and_vouchers() as-is
-#         order, remaining_balance, used_voucher_codes = await do_purchase_and_recharge_vouchers(telegram_user, product, wallet, qty, total)
-#         await update.message.reply_text(
-#             f"✅ Thank you for your purchase!\n\n"
-#             f"• Product: {product.name}\n"
-#             f"• Quantity: {qty}\n"
-#             f"• Total: ${total:.2f}\n\n"
-#             f"🛍️ Your order #{order.id} is now in process.\n\n"
-#             f"💰 Your new balance is ${remaining_balance:.2f}.",
-#             parse_mode="HTML"
-#         )
-#     else:
-#         # 🔁 Check vouchers and handle Completed order with recharge_description
-#         @sync_to_async
-#         def complete_recharge_order():
-#             with transaction.atomic():
-#                 available_vouchers = list(
-#                     VoucherCode.objects.filter(product=product, is_used=False)[:qty]
-#                 )
-#                 print('available vouchers: ', available_vouchers)
-#                 if len(available_vouchers) < qty:
-#                     return None, None, None, "no_voucher"
-
-#                 wallet.balance -= total
-#                 wallet.save()
-
-#                 order = Order.objects.create(
-#                     user=telegram_user,
-#                     total_price=total,
-#                     status="Completed"
-#                 )
-
-#                 used_voucher_codes = []
-
-#                 for i in range(qty):
-#                     voucher = available_vouchers[i]
-#                     voucher.is_used = True
-#                     voucher.save()
-
-#                     used_voucher_codes.append(voucher.code)  # <-- collect codes
-
-#                     OrderItem.objects.create(
-#                         order=order,
-#                         product=product,
-#                         quantity=1,
-#                         unit_price=product.price,
-#                         voucher_code=voucher
-#                     )
-
-#                 return order, wallet.balance, used_voucher_codes, None
-
-#         order, new_balance, used_voucher_codes, error = await complete_recharge_order()
-
-#         if error == "no_voucher":
-#             await update.message.reply_text("⚠️ No voucher is available right now. Please try again later.")
-#             return ConversationHandler.END
-
-#         if used_voucher_codes:
-#             voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
-#             print('voucher text: ', voucher_text)
-#         else:
-#             voucher_text = "❌ No voucher code available right now.\n"
-
-#         await update.message.reply_text(
-#             f"✅ Thank you for your purchase!\n\n"
-#             f"• Product: {product.name}\n"
-#             f"• Quantity: {qty}\n"
-#             f"• Total: ${total:.2f}\n\n"
-#             f"{voucher_text}\n"
-#             f"🛍️ Your order #{order.id} is now in process.\n\n"
-#             f"💰 Your new balance is ${new_balance:.2f}.",
-#             parse_mode="HTML"
-#         )
-
-#     context.user_data.clear()
-#     return ConversationHandler.END
 
 
 
@@ -1085,8 +923,8 @@ async def handle_recharge_quantity_input(update: Update, context: ContextTypes.D
     if wallet.balance < total:
         await update.message.reply_text(
             f"💸 Insufficient balance.\n\n"
-            f"💰 Required: ${total:.2f}\n"
-            f"🔻 Your Balance: ${wallet.balance:.2f}"
+            f"💰 Required: ${normalize_amount(total)}\n"
+            f"🔻 Your Balance: ${normalize_amount(wallet.balance)}"
         )
         return ConversationHandler.END
 
@@ -1285,10 +1123,10 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
         f"• Product: {product.name}\n"
         f"• PUBG ID: {pubg_id}\n"
         f"• Quantity: {qty}\n"
-        f"• Total: ${total:.2f}\n\n"
+        f"• Total: ${normalize_amount(total)}\n\n"
         f"{voucher_text}"
         f"🛍️ Your order #{order.id} is now in process.\n\n"
-        f"💰 Your new balance is ${new_balance:.2f}.",
+        f"💰 Your new balance is ${normalize_amount(new_balance)}.",
         parse_mode="HTML"
     )
 

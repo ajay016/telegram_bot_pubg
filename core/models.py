@@ -97,7 +97,7 @@ class Product(models.Model):
     slug           = models.SlugField(unique=True)
     description    = models.TextField(blank=True)
     recharge_description = models.TextField(blank=True)
-    price          = models.DecimalField(max_digits=10, decimal_places=2)
+    price          = models.DecimalField(max_digits=10, decimal_places=3)
     in_stock       = models.BooleanField(default=True)
     stock_quantity = models.PositiveIntegerField(default=0)
 
@@ -161,7 +161,7 @@ class Product(models.Model):
 
 class Wallet(models.Model):
     telegram_user = models.OneToOneField(TelegramUser, on_delete=models.CASCADE)
-    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
@@ -180,7 +180,7 @@ class Order(models.Model):
         ('Rejected',  'Rejected'),
     ]
     user        = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
-    total_price = models.DecimalField(max_digits=12, decimal_places=2)
+    total_price = models.DecimalField(max_digits=12, decimal_places=3)
     status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Pending')
     created_at  = models.DateTimeField(auto_now_add=True)
     pubg_id    = models.CharField(max_length=20, blank=True, null=True)
@@ -233,7 +233,7 @@ class OrderItem(models.Model):
     order        = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
     product      = models.ForeignKey('Product', on_delete=models.PROTECT)
     quantity     = models.PositiveIntegerField()
-    unit_price   = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_price   = models.DecimalField(max_digits=10, decimal_places=3)
     pubg_id    = models.CharField(max_length=20, blank=True, null=True)
     voucher_code = models.ForeignKey(
         VoucherCode,
@@ -265,7 +265,7 @@ class TopUpTransaction(models.Model):
     user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
     payment_method = models.ForeignKey(PaymentMethod, on_delete=models.CASCADE)
     note = models.CharField(max_length=64, unique=True, blank=True, null=True)
-    amount_received = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    amount_received = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('confirmed', 'Confirmed')], default='pending')
     tx_id = models.CharField(max_length=30, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -279,7 +279,7 @@ class PaymentTransaction(models.Model):
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE)
     payment_method = models.ForeignKey('PaymentMethod', on_delete=models.CASCADE)
     topup_transaction = models.ForeignKey(TopUpTransaction, on_delete=models.CASCADE)
-    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    amount = models.DecimalField(max_digits=10, decimal_places=3, default=0.00)
     note = models.CharField(max_length=255, null=True, blank=True)
     tx_id = models.CharField(max_length=128, null=True, blank=True, unique=True)
     transaction_id = models.CharField(max_length=30, blank=True, null=True)
