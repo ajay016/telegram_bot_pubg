@@ -17,6 +17,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from core.models import *  
 from api.bybit_websocket.bybit_ws import bybit_ws_listener, bybit_transaction_listener, wait_for_matching_transaction, update_wallet_balance
 from core.decorators import block_check
+from core.utils.generate_order import generate_order_summary_pdf
 
 
 # Set up Django
@@ -431,9 +432,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         return True
 
-    elif "My Orders" in text:
-        await update.message.reply_text("Your orders will show here.")
-        return True
+    elif "my orders" in text.lower():
+        tg_user = await get_or_create_telegram_user(update.effective_user)
+        print('telegram user for order generation: ', tg_user.telegram_id)
+
+        pdf_buffer = await sync_to_async(generate_order_summary_pdf)(tg_user)
+
+        if not pdf_buffer:
+            await update.message.reply_text("📭 You have no orders currently.\n\nStart shopping now! 🛍️")
+            return
+
+        await update.message.reply_document(
+            document=pdf_buffer,
+            filename=f"order_summary_{tg_user.telegram_id}.pdf",
+            caption="📄 Here is your order summary!"
+        )
+        return
 
     elif "Leaderboard" in text:
         await update.message.reply_text("Here's the leaderboard.")
