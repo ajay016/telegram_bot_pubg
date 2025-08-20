@@ -96,10 +96,17 @@ class VoucherCodeAdmin(ModelAdmin):
 
 
 @admin.register(Wallet)
-class WalletAdmin(ModelAdmin):
-    list_display = ('id', 'telegram_user', 'balance')
-    search_fields = ('telegram_user__username', 'telegram_user__user_id')
+class WalletAdmin(admin.ModelAdmin):
+    list_display = ('id', 'telegram_user', 'balance', 'created_at', 'updated_at')
+    search_fields = (
+        'telegram_user__username',
+        'telegram_user__telegram_id',
+        'telegram_user__first_name',
+        'telegram_user__last_name',
+    )
     ordering = ('-id',)
+    readonly_fields = ('created_at', 'updated_at')
+    list_select_related = ('telegram_user',)
     
 
 @admin.register(PaymentMethod)
@@ -121,12 +128,32 @@ class PaymentMethodAdmin(ModelAdmin):
     
 
 @admin.register(PaymentTransaction)
-class PaymentTransactionAdmin(ModelAdmin):
-    list_display = ('id', 'wallet', 'payment_method', 'amount', 'status', 'created_at')
-    list_filter = ('status', 'payment_method', 'created_at')
-    search_fields = ('reference', 'wallet__id', 'payment_method__name')
-    readonly_fields = ('created_at',)
+class PaymentTransactionAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user',
+        'wallet',
+        'payment_method',
+        'topup_transaction',
+        'amount',
+        'status',
+        'transaction_id',
+        'created_at',
+        'updated_at',
+    )
+    search_fields = (
+        'user__telegram_id',
+        'user__username',
+        'wallet__telegram_user__telegram_id',
+        'payment_method__name',
+        'topup_transaction__note',
+        'transaction_id',
+        'tx_id',
+    )
+    list_filter = ('status', 'payment_method')
     ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at', 'transaction_id')
+    list_select_related = ('user', 'wallet', 'payment_method', 'topup_transaction')
 
 
 @admin.register(TopUpTransaction)

@@ -462,7 +462,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📞 We're here to help! If you have any questions or need assistance, please choose an option below:\n\n"
             "🔹 Contact Support: Reach out to our support team directly.\n"
-            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msn_gamer).\n\n"
+            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msngamerofficial).\n\n"
             "✨ Feel free to ask anything!",
             parse_mode="Markdown"
         )
