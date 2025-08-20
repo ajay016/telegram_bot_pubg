@@ -21,7 +21,7 @@ from core.utils.generate_order import generate_order_summary_pdf
 
 
 # Set up Django
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "telegram_bot_project.settings")  # Replace with your project
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "telegram_bot_project.settings")
 django.setup()
 
 BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
@@ -152,6 +152,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Here are some exciting products that we offer for you!!", reply_markup=InlineKeyboardMarkup(keyboard))
         
     elif data.startswith("recharge_cat_"):
+        print('Browse game pro---------------------')
         cat_id = int(data.split("_")[-1])
         products = await sync_to_async(list)(
             Product.objects.filter(recharge_category_id=cat_id, in_stock=True)
@@ -326,7 +327,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat_id,
                 text=(
                     f"✅ <b>Payment received successfully!</b>\n\n"
-                    f"💰 <b>${amount}</b> has been added to your wallet.\n"
+                    f"💰 <b>${float(amount):.2f}</b> has been added to your wallet.\n"
                     f"💼 <b>New Balance:</b> <code>${balance}</code>"
                 ),
                 parse_mode="HTML"
@@ -791,7 +792,7 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 
     voucher_text = "\n".join(assigned_codes)
     file_buffer = io.StringIO(voucher_text)
-    file_buffer.name = f"{product.slug.replace('-', '_')}.txt"
+    file_buffer.name = f"Order_ID_{order.id}_{product.slug.replace('-', '_')}.txt"
     
     description = f"\n🧾 <b>Recharge Description:</b>\n<code>{product.recharge_description}</code>" if product.recharge_description else ""
 
@@ -833,7 +834,7 @@ async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product)
     # voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
     voucher_text = "\n".join(assigned_codes)
     file_buffer = io.StringIO(voucher_text)
-    file_buffer.name = f"{product.slug.replace('-', '_')}.txt"
+    file_buffer.name = f"Order_ID_{order.id}_{product.slug.replace('-', '_')}.txt"
     
     message = (
         f"📦 <b>New Completed Order</b>\n\n"
@@ -868,7 +869,7 @@ async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, p
 
     voucher_text = "\n".join(assigned_codes)
     file_buffer = io.StringIO(voucher_text)
-    file_buffer.name = f"{product.slug.replace('-', '_')}.txt"
+    file_buffer.name = f"Order_ID_{order.id}_{product.slug.replace('-', '_')}.txt"
     
     message = (
         f"📦 <b>New Completed Order</b>\n\n"
@@ -1251,6 +1252,13 @@ def create_topup_transaction(user_id, method_id, note):
     user = TelegramUser.objects.get(id=user_id)
     method = PaymentMethod.objects.get(id=method_id)
     return TopUpTransaction.objects.create(user=user, payment_method=method, note=note)
+
+@sync_to_async
+def create_payment_transaction_binance(user_id, method_id, topup_transaction, note):
+    user = TelegramUser.objects.get(id=user_id)
+    wallet = Wallet.objects.get(telegram_user=user)
+    method = PaymentMethod.objects.get(id=method_id)
+    PaymentTransaction.objects.create(user=user, payment_method=method, wallet=wallet, topup_transaction=topup_transaction, note=note)
 
 
 @sync_to_async

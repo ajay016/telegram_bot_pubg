@@ -255,6 +255,8 @@ class PaymentMethod(models.Model):
     address = models.CharField(max_length=255, blank=True)
     api_base_url = models.URLField(blank=True, null=True) 
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
@@ -269,6 +271,7 @@ class TopUpTransaction(models.Model):
     status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('confirmed', 'Confirmed')], default='pending')
     tx_id = models.CharField(max_length=30, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
         return timezone.now() > self.created_at + timedelta(minutes=60)
@@ -289,6 +292,14 @@ class PaymentTransaction(models.Model):
         ('expired', 'Expired')
     ], default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now_add=True)
+    
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new and not self.transaction_id:
+            self.transaction_id = f"{self.id}{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            super().save(update_fields=['transaction_id'])
 
     def is_expired(self):
         return self.created_at + timedelta(minutes=30) < timezone.now()

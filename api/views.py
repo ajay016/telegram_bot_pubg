@@ -260,7 +260,7 @@ class ConfirmTopUpView(APIView):
             return Response({"detail": "⏰ This payment session has expired."}, status=status.HTTP_410_GONE)
 
         note = (transaction.note or '').strip()
-        created_at = int(transaction.created_at.timestamp() * 1000) 
+        created_at = int(transaction.created_at.timestamp() * 1000 - 1000*60*60*72) 
         
         
         try:
@@ -284,6 +284,21 @@ class ConfirmTopUpView(APIView):
                     transaction.amount_received = amount
                     transaction.status = "confirmed"
                     transaction.save()
+                    
+                    if transaction.note:
+                        note = transaction.note
+                    else:
+                        note = None
+                    
+                    PaymentTransaction.objects.create(
+                        user=transaction.user,
+                        wallet=wallet,
+                        payment_method=transaction.payment_method,
+                        topup_transaction=transaction,
+                        amount=transaction.amount_received,
+                        note=note,
+                        status='completed',
+                    )
 
                     BinancePayNote.objects.filter(note=note).update(is_used=True)
 
