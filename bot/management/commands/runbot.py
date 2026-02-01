@@ -767,6 +767,17 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
                 total_price=total,
                 status="Completed"
             )
+            
+            Transaction.objects.create(
+                user=telegram_user,
+                order=order,
+                payment_method=None,
+                note=None,
+                amount=total,
+                transaction_type="purchase",
+                direction="debit",
+                status="confirmed",
+            )
 
             assigned_codes = []
 
@@ -1025,11 +1036,25 @@ def complete_recharge_order_with_vouchers(user, product, wallet, qty, total):
 
         wallet.balance -= total
         wallet.save()
+        
+        product.stock_quantity -= qty
+        product.save(update_fields=["stock_quantity"])
 
         order = Order.objects.create(
             user=user,
             total_price=total,
             status="Completed",
+        )
+        
+        Transaction.objects.create(
+            user=user,
+            order=order,
+            payment_method=None,
+            note=None,
+            amount=total,
+            transaction_type="purchase",
+            direction="debit",
+            status="confirmed",
         )
 
         used_voucher_codes = []
@@ -1066,6 +1091,17 @@ def complete_recharge_without_description(user, product, wallet, qty, total, pub
             total_price=total,
             pubg_id=pubg_id,
             status="Pending"
+        )
+        
+        Transaction.objects.create(
+            user=user,
+            order=order,
+            payment_method=None,
+            note=None,
+            amount=total,
+            transaction_type="purchase",
+            direction="debit",
+            status="confirmed",
         )
 
         available_vouchers = list(
