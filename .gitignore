@@ -1,11 +1,32 @@
+# --- Django Core ---
+*.py[cod]
+*$py.class
+__pycache__/
+local_settings.py
 db.sqlite3
+db.sqlite3-journal
+
+# --- Static & Media ---
+# The leading slash '/' ensures we only ignore the 'static' folder
+# in the project root, but keep tracking 'app/static/' folders.
+/static/
+/media/
+voucher_uploads/
+
+# --- Environments & Secrets ---
+.env
+.env.example
+env/
+venv/
+/vscode
+
+# --- Specific Keys (SECURITY) ---
 binance_address.txt
 binance_keys.txt
 bybit_api_keys.txt
-/vscode
+
+# --- IDEs & OS ---
 .vscode/
-.vscode
 .idea/
-venv/
-.env
-env
+.DS_Store
+*.swp
