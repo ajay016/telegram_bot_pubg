@@ -99,7 +99,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("🏬 Welcome to Gamefuel Bot!\n\n"
+    await update.message.reply_text("🏬 Welcome to MSNGamer Bot!\n\n"
                                       "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
                                       "🔘 Choose an option below to get started:",
                                       reply_markup=reply_markup)
@@ -463,7 +463,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📞 We're here to help! If you have any questions or need assistance, please choose an option below:\n\n"
             "🔹 Contact Support: Reach out to our support team directly.\n"
-            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/maliusmanestore).\n\n"
+            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msngamerofficial).\n\n"
             "✨ Feel free to ask anything!",
             parse_mode="Markdown"
         )
