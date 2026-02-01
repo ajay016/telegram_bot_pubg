@@ -292,7 +292,6 @@ class Transaction(models.Model):
         ('adjustment', 'Adjustment'),
         ('other', 'Other'),
     ]
-
     DIRECTION_CHOICES = [
         ('credit', 'Credit'),  # adds to wallet
         ('debit', 'Debit'),    # deducts from wallet
