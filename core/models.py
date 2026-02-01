@@ -5,6 +5,8 @@ from decimal import Decimal
 from datetime import timedelta
 from django.utils.crypto import get_random_string
 from django.core.exceptions import ValidationError
+import random
+import string
 
 
 
@@ -336,6 +338,47 @@ class Transaction(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    def _make_tx_id(self):
+        # prefix based on transaction type
+        prefix_map = {
+            "topup": "TP",
+            "purchase": "PU",
+            "refund": "RF",
+            "adjustment": "AD",
+            "other": "OT",
+        }
+        prefix = prefix_map.get(getattr(self, "transaction_type", None), "TX")
+
+        dt = self.created_at or timezone.now()
+        ts = dt.strftime("%Y%m%d%H%M%S")
+
+        # Prefer PK if available (most unique & stable). If not saved yet, use random.
+        if self.pk:
+            core = f"{prefix}-{ts}-{self.pk}"
+        else:
+            rand = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            core = f"{prefix}-{ts}-{rand}"
+
+        return core
+
+
+    def save(self, *args, **kwargs):
+        # ✅ generate only during create (or when tx_id is empty)
+        creating = self._state.adding  # True before first save
+
+        super().save(*args, **kwargs)  # first save so we have pk + created_at
+
+        if creating and not self.tx_id:
+            tx_id = self._make_tx_id()
+
+            # ultra-safe uniqueness fallback
+            if Transaction.objects.filter(tx_id=tx_id).exists():
+                rand = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                tx_id = f"{tx_id}-{rand}"
+
+            Transaction.objects.filter(pk=self.pk).update(tx_id=tx_id)
+            self.tx_id = tx_id
 
     def is_expired(self):
         return timezone.now() > self.created_at + timedelta(minutes=60)
