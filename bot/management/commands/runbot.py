@@ -10,6 +10,7 @@ from django.db import transaction
 from asgiref.sync import sync_to_async
 import websockets
 import json
+from django.conf import settings
 from telegram import Bot, InputFile
 import aiohttp
 from telegram import InlineKeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, Update, BotCommand
@@ -70,7 +71,7 @@ def get_wallet_by_telegram_id(telegram_id):
 
 @sync_to_async
 def get_all_payment_methods():
-    return list(PaymentMethod.objects.all().values('id', 'name'))
+    return list(PaymentMethod.objects.filter(is_active=True).values('id', 'name'))
 
 
 @block_check
@@ -98,7 +99,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("🏬 Welcome to MSNGAMER-E-STORE Bot!\n\n"
+    await update.message.reply_text("🏬 Welcome to Gamefuel Bot!\n\n"
                                       "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
                                       "🔘 Choose an option below to get started:",
                                       reply_markup=reply_markup)
@@ -392,7 +393,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             display_name = str(telegram_user.id)
     
         current_date = datetime.now().strftime("%B %d, %Y")
-        balance = wallet.balance
+        balance = f"{wallet.balance:.3f}"
 
         # Get all payment methods
         payment_methods = await get_all_payment_methods()  # This should return a list of dicts or objects with id and name
@@ -462,7 +463,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📞 We're here to help! If you have any questions or need assistance, please choose an option below:\n\n"
             "🔹 Contact Support: Reach out to our support team directly.\n"
-            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msngamerofficial).\n\n"
+            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/maliusmanestore).\n\n"
             "✨ Feel free to ask anything!",
             parse_mode="Markdown"
         )
@@ -800,11 +801,16 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
         f"✅ <b>Thank you for your purchase!</b>\n\n"
         f"🛒 Product: <b>{product.name}</b>\n"
         f"🔢 Quantity: <b>{qty}</b>\n"
-        f"💲 Total: <b>${normalize_amount(total)}</b>\n"
-        f"💼 New Balance: <b>${new_balance:.2f}</b>\n"
         f"🧾 Order ID: <code>{order.id}</code>"
-        f"{description}\n\n"
-        f"📄 Voucher codes are attached as a text file.",
+        f"💲 Cost: <b>${normalize_amount(total)}</b>\n"
+        f"✅ Status: <b>${normalize_amount(total)}</b>\n"
+        # f"💼 New Balance: <b>${new_balance:.2f}</b>\n"
+        # f"{description}\n\n"
+        # f"📄 Voucher codes are attached as a text file.",
+        f"📝 <b>Note:</b>\n"
+        f"ℹ️ Kindly find the attached text file to check the product information.\n"
+        f"🔒 Do not share the file with anyone else.\n"
+        f"🤔 If you have any problem, feel free to contact us @MSN_GAMERS",
         parse_mode="HTML"
     )
     
@@ -1248,10 +1254,22 @@ def get_payment_method_info(method_id):
     
 
 @sync_to_async
-def create_topup_transaction(user_id, method_id, note):
+def create_topup_transaction(user_id, method_id, note=None):
     user = TelegramUser.objects.get(id=user_id)
     method = PaymentMethod.objects.get(id=method_id)
-    return TopUpTransaction.objects.create(user=user, payment_method=method, note=note)
+
+    return Transaction.objects.create(
+        user=user,
+        payment_method=method,
+        note=note,
+
+        # ✅ NEW FIELDS
+        transaction_type="topup",
+        direction="credit",
+
+        # keep pending until confirmed
+        status="pending",
+    )
 
 @sync_to_async
 def create_payment_transaction_binance(user_id, method_id, topup_transaction, note):
@@ -1264,16 +1282,16 @@ def create_payment_transaction_binance(user_id, method_id, topup_transaction, no
 @sync_to_async
 def get_transaction_by_id(transaction_id):
     try:
-        return TopUpTransaction.objects.get(id=transaction_id)
-    except TopUpTransaction.DoesNotExist:
+        return Transaction.objects.get(id=transaction_id)
+    except Transaction.DoesNotExist:
         return None
 
 
 @sync_to_async
 def confirm_transaction_and_update_wallet(transaction_id, amount):
-    tx = TopUpTransaction.objects.get(id=transaction_id)
+    tx = Transaction.objects.get(id=transaction_id)
     tx.status = "confirmed"
-    tx.amount_received = amount
+    tx.amount = amount
     tx.save()
     
     wallet = Wallet.objects.get(telegram_user=tx.user)
@@ -1389,7 +1407,7 @@ def mark_payment_completed(payment_id):
 
 @sync_to_async
 def mark_topup_completed(topup_id):
-    TopUpTransaction.objects.filter(id=topup_id).update(status="confirmed")
+    Transaction.objects.filter(id=topup_id).update(status="confirmed")
 
 @sync_to_async
 def credit_wallet(user_id, amount):
@@ -1484,7 +1502,7 @@ class Command(BaseCommand):
     help = "Run the Telegram bot and WebSocket listener"
 
     def handle(self, *args, **options):
-        application = ApplicationBuilder().token(settings.BOT_TOKEN).build()
+        application = ApplicationBuilder().token(BOT_TOKEN).build()
 
         application.add_handler(CommandHandler("start", start))
         application.add_handler(conv_handler)

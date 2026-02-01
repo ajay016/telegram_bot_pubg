@@ -20,6 +20,21 @@ class TelegramUser(models.Model):
 
     def __str__(self):
         return f"{self.telegram_id}"
+    
+
+class Supplier(models.Model):
+    name = models.CharField(max_length=150)
+    contact_name = models.CharField(max_length=150, null=True, blank=True)
+    phone = models.CharField(max_length=50, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    note = models.TextField(null=True, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
 
 class Category(models.Model):
@@ -201,16 +216,23 @@ class VoucherCode(models.Model):
 
 class UploadVoucherCode(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
+
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='voucher_uploads'
+    )
+
     file = models.FileField(upload_to='voucher_uploads/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
-        # Optional: validate the file before saving
         if not self.file.name.endswith(('.txt',)):
             raise ValidationError("Only .txt files are allowed.")
 
     def process_file(self):
-        # Read the file and create voucher codes
         self.file.seek(0)
         lines = self.file.read().decode('utf-8').splitlines()
 
@@ -222,11 +244,10 @@ class UploadVoucherCode(models.Model):
             else:
                 raise ValidationError(f"Invalid code format: '{line}'")
 
-        # Save voucher codes
         for code in valid_lines:
             VoucherCode.objects.get_or_create(code=code, product=self.product)
-            
-        self.product.update_stock_from_vouchers()  # Update stock after processing
+
+        self.product.update_stock_from_vouchers()
     
 
 class OrderItem(models.Model):
@@ -263,25 +284,72 @@ class PaymentMethod(models.Model):
 
 
 
-class TopUpTransaction(models.Model):
+class Transaction(models.Model):
+    TYPE_CHOICES = [
+        ('topup', 'Topup'),
+        ('purchase', 'Purchase'),
+        ('refund', 'Refund'),
+        ('adjustment', 'Adjustment'),
+        ('other', 'Other'),
+    ]
+
+    DIRECTION_CHOICES = [
+        ('credit', 'Credit'),  # adds to wallet
+        ('debit', 'Debit'),    # deducts from wallet
+    ]
+
     user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
-    payment_method = models.ForeignKey(PaymentMethod, on_delete=models.CASCADE)
+
+    # Optional: used for topups (bank/crypto/stars/etc)
+    payment_method = models.ForeignKey(
+        PaymentMethod, on_delete=models.CASCADE, null=True, blank=True
+    )
+
+    # Optional: used for purchase/refund to connect to an Order
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions'
+    )
+
+    transaction_type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, default='topup'
+    )
+    direction = models.CharField(
+        max_length=10, choices=DIRECTION_CHOICES, default='credit'
+    )
+
+    # Keep amount always positive; direction tells +/- meaning
+    amount = models.DecimalField(max_digits=10, decimal_places=3, default=0)
+
+    # Keep your existing "note" behavior (you use it for matching deposits)
     note = models.CharField(max_length=64, unique=True, blank=True, null=True)
-    amount_received = models.DecimalField(max_digits=10, decimal_places=3, default=0)
-    status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('confirmed', 'Confirmed')], default='pending')
-    tx_id = models.CharField(max_length=30, blank=True, null=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=[('pending', 'Pending'), ('confirmed', 'Confirmed'), ('failed', 'Failed')],
+        default='pending'
+    )
+
+    tx_id = models.CharField(max_length=64, blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def is_expired(self):
         return timezone.now() > self.created_at + timedelta(minutes=60)
+
+    def __str__(self):
+        return f"{self.user} | {self.transaction_type} | {self.direction} | {self.amount} | {self.status}"
     
     
 class PaymentTransaction(models.Model):
     user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE)
     payment_method = models.ForeignKey('PaymentMethod', on_delete=models.CASCADE)
-    topup_transaction = models.ForeignKey(TopUpTransaction, on_delete=models.CASCADE)
+    topup_transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=3, default=0.00)
     note = models.CharField(max_length=255, null=True, blank=True)
     tx_id = models.CharField(max_length=128, null=True, blank=True, unique=True)
@@ -292,7 +360,7 @@ class PaymentTransaction(models.Model):
         ('expired', 'Expired')
     ], default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     def save(self, *args, **kwargs):
         is_new = self.pk is None

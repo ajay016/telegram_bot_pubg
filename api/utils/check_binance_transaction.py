@@ -1,7 +1,7 @@
 from datetime import timedelta
 from django.utils import timezone
 from .binance_client import binance_signed_request
-from core.models import BinancePayNote, TopUpTransaction, Wallet
+from core.models import BinancePayNote, Transaction, Wallet
 from decimal import Decimal
 
 async def confirm_binance_payment(user, note):
@@ -39,12 +39,12 @@ async def confirm_binance_payment(user, note):
             wallet.balance += amount_decimal
             await wallet.asave()
 
-            # Create TopUpTransaction
-            await TopUpTransaction.objects.acreate(
+            # Create Transaction
+            await Transaction.objects.acreate(
                 user=user,
                 payment_method_id=tx.get("bizType"),  # Use appropriate method id or pass it
                 note=note,
-                amount_received=amount_decimal,
+                amount=amount_decimal,
                 status="confirmed"
             )
 

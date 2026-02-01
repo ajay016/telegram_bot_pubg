@@ -10,6 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+
+import environ
 from pathlib import Path
 from decouple import config
 # from django.templatetags.static import static
@@ -22,15 +24,19 @@ from decouple import config
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+env = environ.Env(
+    DEBUG=(bool, False)
+)
+
+environ.Env.read_env(BASE_DIR / ".env")
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-r9ul9+#!rm*@lb!iiohc1rwawgacml%j0sg(y1bz*2e208c--a'
-BOT_TOKEN = '8156115400:AAESiwQMq4jgDc_ou4UAijD2kNNVmlvjIFA'
-# BOT_TOKEN = '7277573243:AAHJBQhgXcW5akG3UB84r7uNh7mctWEiUv8'
-BOT_API_BASE_URL = "http://127.0.0.1:8000"
+BOT_API_BASE_URL = env("BOT_API_BASE_URL")
 
 
 # Koushik Test
@@ -45,10 +51,13 @@ BOT_API_BASE_URL = "http://127.0.0.1:8000"
 # BYBIT_API_SECRET = "zynFHJjrEzI8sdeIaVAST4u4Yb9yeRVoH78b"
 # BYBIT_API_KEY = "BerLfmUSBRR4y3iC5H"
 
-BYBIT_API_SECRET = "xGaErbycDwdOxpMv2lHCPdHZKKsHrgTIyVHc"
-BYBIT_API_KEY = "gVAhSlNc1yCe2A0UlT"
+BYBIT_API_KEY = env("BYBIT_API_KEY")
+BYBIT_API_SECRET = env("BYBIT_API_SECRET")
 
-TELEGRAM_BOT_TOKEN = "8156115400:AAESiwQMq4jgDc_ou4UAijD2kNNVmlvjIFA"
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN")
+
+BINANCE_API_KEY = env("BINANCE_API_KEY")
+BINANCE_SECRET = env("BINANCE_SECRET")
 
 # BOT_TOKEN = config('BOT_TOKEN')
 # BYBIT_API_SECRET = config('BYBIT_API_SECRET')
@@ -60,7 +69,7 @@ TELEGRAM_BOT_TOKEN = "8156115400:AAESiwQMq4jgDc_ou4UAijD2kNNVmlvjIFA"
 DEBUG = True
 
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
 
 # Application definition

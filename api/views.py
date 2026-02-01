@@ -252,8 +252,13 @@ class ConfirmTopUpView(APIView):
             return Response({"detail": "Missing transaction_id."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            transaction = TopUpTransaction.objects.select_related("user").get(id=transaction_id, status="pending")
-        except TopUpTransaction.DoesNotExist:
+            transaction = Transaction.objects.select_related("user").get(
+                id=transaction_id,
+                status="pending",
+                transaction_type="topup",
+                direction="credit",
+            )
+        except Transaction.DoesNotExist:
             return Response({"detail": "❌ Transaction not found or already processed."}, status=status.HTTP_404_NOT_FOUND)
 
         if transaction.is_expired():
@@ -281,7 +286,7 @@ class ConfirmTopUpView(APIView):
                     wallet.balance += amount
                     wallet.save()
 
-                    transaction.amount_received = amount
+                    transaction.amount = amount
                     transaction.status = "confirmed"
                     transaction.save()
                     
@@ -295,7 +300,7 @@ class ConfirmTopUpView(APIView):
                         wallet=wallet,
                         payment_method=transaction.payment_method,
                         topup_transaction=transaction,
-                        amount=transaction.amount_received,
+                        amount=transaction.amount,
                         note=note,
                         status='completed',
                     )

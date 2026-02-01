@@ -156,9 +156,9 @@ class PaymentTransactionAdmin(admin.ModelAdmin):
     list_select_related = ('user', 'wallet', 'payment_method', 'topup_transaction')
 
 
-@admin.register(TopUpTransaction)
-class TopUpTransactionAdmin(ModelAdmin):
-    list_display = ('id', 'user', 'payment_method', 'note', 'amount_received', 'status', 'created_at')
+@admin.register(Transaction)
+class TransactionAdmin(ModelAdmin):
+    list_display = ('id', 'user', 'payment_method', 'note', 'amount', 'status', 'created_at')
     list_filter = ('status', 'payment_method', 'created_at')
     search_fields = ('note', 'user__username', 'payment_method__name')
     readonly_fields = ('created_at',)

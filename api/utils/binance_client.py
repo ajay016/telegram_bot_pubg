@@ -8,6 +8,7 @@ import requests
 from urllib.parse import urlencode
 from requests.exceptions import RequestException
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 # BINANCE_API_KEY = 'lHxRqsX0jkw8wsbSPG0tKmqTKA6pONcd7ihV3VqUvQmAayAq8Qz3RruMjOqZRvB0'
 # BINANCE_SECRET = 'uPvbk01bNJKlKcrDzrgiFgMKigGsUy9j8EOJrE42XgTtcvepZwhyF46mcnMj6ZFm'
 
-BINANCE_API_KEY = 'CclbtRl8Z4yQd5Q4tvoyo32OLecrmUrKqoAErEwCPEzglxZwDNoL1RasKbUasYMh'
-BINANCE_SECRET = '3Kq2nwLKnSsGN4bzDkPqI8yv5E9BwGposj1tvBsOkTocunxFM7pxCwPSdMYr9pig'
+BINANCE_API_KEY = settings.BINANCE_API_KEY
+BINANCE_SECRET = settings.BINANCE_SECRET
 
 
 # BINANCE_API_KEY = config('BINANCE_API_KEY')
