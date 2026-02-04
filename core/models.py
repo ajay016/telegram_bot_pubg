@@ -1,3 +1,4 @@
+import code
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -241,12 +242,11 @@ class UploadVoucherCode(models.Model):
         valid_lines = []
         for line in lines:
             code = line.strip()
-            if code and code.isalnum():
-                valid_lines.append(code)
-            else:
-                raise ValidationError(f"Invalid code format: '{line}'")
+            if not code:
+                continue  # ignore empty lines
+            valid_lines.append(code)
 
-        for code in valid_lines:
+        for code in set(valid_lines):
             VoucherCode.objects.get_or_create(code=code, product=self.product)
 
         self.product.update_stock_from_vouchers()
@@ -438,3 +438,37 @@ class AdminChatID(models.Model):
     def __str__(self):
         display_name = self.name or self.username or self.chat_id
         return f"{display_name} ({self.chat_id})"
+    
+    
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=200, blank=True)
+    message = models.TextField()  # what admin writes
+    is_active = models.BooleanField(default=True)
+
+    show_from = models.DateTimeField(null=True, blank=True)
+    show_until = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_announcements",
+    )
+    
+    image = models.ImageField(upload_to="announcements/images/", null=True, blank=True)
+    attachment = models.FileField(upload_to="announcements/files/", null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def is_visible_now(self):
+        now = timezone.now()
+        if not self.is_active:
+            return False
+        if self.show_from and now < self.show_from:
+            return False
+        if self.show_until and now > self.show_until:
+            return False
+        return True

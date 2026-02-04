@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import *
 from unfold.admin import ModelAdmin
 from unfold.admin import TabularInline
+from django.contrib import messages
 
 
 
@@ -69,7 +70,7 @@ class OrderItemInline(admin.TabularInline):
 class OrderAdmin(ModelAdmin):
     list_display = ('id', 'user', 'pubg_id', 'total_price', 'status', 'created_at')
     list_filter = ('status', 'created_at')
-    search_fields = ('user__telegram_id', 'user__username')
+    search_fields = ('user__telegram_id', 'user__username', 'items__voucher_code__code')
     date_hierarchy = 'created_at'
     inlines = [OrderItemInline]
     autocomplete_fields = ('user',)
@@ -79,7 +80,7 @@ class OrderAdmin(ModelAdmin):
 class OrderItemAdmin(ModelAdmin):
     list_display = ('order', 'product', 'quantity', 'unit_price', 'pubg_id', 'voucher_code')
     list_filter = ('product',)
-    search_fields = ('order__id', 'product__name')
+    search_fields = ('order__id', 'product__name', 'voucher_code__code')
     autocomplete_fields = ('order', 'product', 'voucher_code')
 
 
@@ -172,20 +173,60 @@ class BinancePayNoteAdmin(ModelAdmin):
     search_fields = ('note', 'user__username')
     readonly_fields = ('created_at',)
     ordering = ('-created_at',)
+    
+    
+@admin.register(Supplier)
+class SupplierAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing Suppliers.
+    """
+    list_display = ('name', 'contact_name', 'phone', 'email', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name', 'contact_name', 'email', 'phone')
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at')
+    
+    # Organize fields into sections for better readability
+    fieldsets = (
+        ('Company Info', {
+            'fields': ('name', 'is_active')
+        }),
+        ('Contact Details', {
+            'fields': ('contact_name', 'phone', 'email')
+        }),
+        ('Additional Info', {
+            'fields': ('note', 'created_at', 'updated_at'),
+            'classes': ('collapse',)  # Hide this section by default
+        }),
+    )
 
 
 @admin.register(UploadVoucherCode)
 class UploadVoucherCodeAdmin(admin.ModelAdmin):
-    list_display = ('product', 'uploaded_at')
+    """
+    Admin interface for uploading vouchers, linked with Suppliers.
+    """
+    list_display = ('product', 'supplier', 'file', 'uploaded_at')
+    list_filter = ('uploaded_at', 'supplier', 'product')
+    search_fields = ('product__name', 'supplier__name', 'file')
+    date_hierarchy = 'uploaded_at'
+    
+    # Use autocomplete if you have many suppliers/products
+    # (Requires search_fields to be set on SupplierAdmin and ProductAdmin)
+    autocomplete_fields = ['supplier', 'product'] 
 
     def save_model(self, request, obj, form, change):
+        """
+        Override save to ensure the file processing logic runs
+        when a new file is uploaded via Admin.
+        """
         super().save_model(request, obj, form, change)
+        # Trigger the file processing logic defined in your model
         try:
             obj.process_file()
         except Exception as e:
-            self.message_user(request, f"Error: {str(e)}", level='error')
-        else:
-            self.message_user(request, "Voucher codes uploaded successfully.")
+            # You might want to handle user messaging here using Django messages
+            self.message_user(request, f"Error processing file: {e}", level=messages.ERROR)
             
             
 @admin.register(AdminChatID)
@@ -197,3 +238,33 @@ class AdminChatIDAdmin(admin.ModelAdmin):
             "fields": ("chat_id", "username", "name")
         }),
     )
+    
+    
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "is_active", "has_image", "has_attachment", "show_from", "show_until", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("title", "message")
+    ordering = ("-created_at",)
+    
+    fields = (
+        "title",
+        "message",
+        "image",
+        "attachment",
+        "is_active",
+        ("show_from", "show_until"),
+    )
+    
+    def has_image(self, obj):
+        return bool(obj.image)
+    has_image.boolean = True
+
+    def has_attachment(self, obj):
+        return bool(obj.attachment)
+    has_attachment.boolean = True
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)

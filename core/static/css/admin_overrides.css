@@ -1,0 +1,29 @@
+/* Unfold dark-mode: increase contrast for form fields */
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+  border: 1px solid #374151 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #9ca3af !important;
+}
+
+html.dark label,
+html.dark .help,
+html.dark .helptext,
+html.dark .text-gray-500,
+html.dark .text-slate-500 {
+  color: #e5e7eb !important;
+}
+
+/* Some admin widgets use these */
+html.dark .vTextField,
+html.dark .vLargeTextField {
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+  border-color: #374151 !important;
+}

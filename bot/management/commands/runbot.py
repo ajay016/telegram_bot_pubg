@@ -1,6 +1,7 @@
 import os
 import io
 import django
+from django.utils import timezone
 from datetime import datetime
 import asyncio
 from django.core.management.base import BaseCommand
@@ -8,6 +9,7 @@ from django.utils.crypto import get_random_string
 import random
 from django.db import transaction
 from asgiref.sync import sync_to_async
+from decimal import Decimal, ROUND_DOWN
 import websockets
 import json
 from django.conf import settings
@@ -19,6 +21,13 @@ from core.models import *
 from api.bybit_websocket.bybit_ws import bybit_ws_listener, bybit_transaction_listener, wait_for_matching_transaction, update_wallet_balance
 from core.decorators import block_check
 from core.utils.generate_order import generate_order_summary_pdf
+from telegram import InputFile
+
+
+
+
+
+
 
 
 # Set up Django
@@ -75,11 +84,34 @@ def get_all_payment_methods():
 
 
 @block_check
-# Start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Register the Telegram user and ensure a Wallet is created
     await get_or_create_telegram_user(update.effective_user)
-    
+
+    announcement = await get_current_announcement()
+
+    # 1) Send announcement as its own bubble (if any)
+    if announcement:
+        caption = f"📢 <b>{announcement.title or 'Announcement'}</b>\n\n{announcement.message}"
+
+        # 1) Send image (upload local file bytes)
+        if announcement.image and hasattr(announcement.image, "path"):
+            with open(announcement.image.path, "rb") as f:
+                await update.message.reply_photo(
+                    photo=InputFile(f, filename=announcement.image.name.split("/")[-1]),
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+        else:
+            await update.message.reply_text(caption, parse_mode="HTML")
+
+        # 2) Send attachment (upload local file bytes)
+        if announcement.attachment and hasattr(announcement.attachment, "path"):
+            with open(announcement.attachment.path, "rb") as f:
+                await update.message.reply_document(
+                    document=InputFile(f, filename=announcement.attachment.name.split("/")[-1]),
+                    caption="📎 Attachment"
+                )
+
     keyboard = [
         [
             InlineKeyboardButton("🛒 Browse Products", callback_data="browse_products"),
@@ -89,7 +121,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("📦 My Orders", callback_data="my_orders"),
             InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard")
         ],
-        # This one takes full width (alone in its row)
         [
             InlineKeyboardButton("🎮 Game ID Recharge (Auto)", callback_data="game_id_recharge_auto")
         ],
@@ -98,11 +129,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🧩 API", callback_data="api")
         ]
     ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text("🏬 Welcome to MSNGamer Bot!\n\n"
-                                      "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
-                                      "🔘 Choose an option below to get started:",
-                                      reply_markup=reply_markup)
+
+    # ✅ Inline keyboard markup (correct for InlineKeyboardButton)
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # 2) Send welcome text as a second bubble with the menu keyboard
+    await update.message.reply_text(
+        "🏬 Welcome to MSNGamer Bot!\n\n"
+        "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
+        "🔘 Choose an option below to get started:",
+        reply_markup=reply_markup
+    )
 
 @block_check
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,6 +158,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
         await query.edit_message_text("Select a category:", reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    elif data == "my_wallet":
+        telegram_user = await get_or_create_telegram_user(update.effective_user)
+        wallet = await get_wallet_by_telegram_id(telegram_user.telegram_id)
+        if not wallet:
+            await query.edit_message_text("❌ Wallet not found.")
+            return ConversationHandler.END
+
+        # Payment methods
+        payment_methods = await get_all_payment_methods()
+
+        text = (
+            f"👛 <b>Wallet Information</b>\n\n"
+            f"🆔 <b>Telegram ID:</b> <code>{telegram_user.telegram_id}</code>\n"
+            f"💰 <b>Current Balance:</b> <code>${fmt_money(wallet.balance)}</code>\n\n"
+            f"✨ Select a top up method:"
+        )
+
+        # Buttons 2 per row
+        keyboard = []
+        row = []
+        for i, method in enumerate(payment_methods, start=1):
+            row.append(InlineKeyboardButton(f"{method['name']}", callback_data=f"pm_{method['id']}"))
+            if i % 2 == 0:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
+
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML"
+        )
+        return ConversationHandler.END
         
     elif data == "game_id_recharge_auto":
         recharge_categories = await sync_to_async(list)(RechargeCategory.objects.filter(is_active=True))
@@ -146,7 +220,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return str(Decimal(value).normalize())
         
         keyboard = [
-            [InlineKeyboardButton(f"{prod['name']} | ${format_price(prod['price'])} | {prod['stock_quantity']}", callback_data=f"prod_{prod['id']}")]
+            [InlineKeyboardButton(f"{prod['name']} | ${fmt_money(prod['price'])} | {prod['stock_quantity']}", callback_data=f"prod_{prod['id']}")]
             for prod in products
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="browse_products")])
@@ -226,7 +300,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return SELECT_QUANTITY
 
     elif data == "main_menu":
+        # ✅ prevent old pending purchase from being completed later
+        context.user_data.pop("pending_product_id", None)
+        context.user_data.pop("pending_qty", None)
+        context.user_data.pop("pending_total", None)
+
         await start(update, context)
+        return ConversationHandler.END
         
     elif data.startswith("pm_"):
         method_id = int(data.split("_")[1])
@@ -379,6 +459,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "My Wallet" in text:
         # Fetch wallet and user data
         wallet = await get_wallet_by_telegram_id(telegram_id)
+        print('wallet info: ', wallet)
         if not wallet:
             await update.message.reply_text("❌ Wallet not found.")
             return
@@ -717,16 +798,47 @@ async def handle_quantity_input(update, context):
     return CONFIRM_PURCHASE
 
 
+def fmt_money(v) -> str:
+    """
+    Show 2 decimals normally.
+    If value needs more precision, show up to 4 decimals.
+    Never show scientific notation.
+    """
+    v = Decimal(str(v))  # safe conversion from float/Decimal
+    q4 = v.quantize(Decimal("0.0001"), rounding=ROUND_DOWN)
+    q2 = v.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+
+    # if more precision than 2dp exists -> show 4dp
+    if q4 != q2.quantize(Decimal("0.0001")):
+        return f"{q4:.4f}"
+    return f"{q2:.2f}"
+
+
 
 @block_check
 async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    # ✅ Only allow the 2 purchase confirmation buttons to trigger this handler
+    if query.data not in ("confirm_purchase_yes", "confirm_purchase_no"):
+        # User clicked something else while purchase confirmation was pending.
+        # Clear pending values to prevent accidental completion.
+        context.user_data.pop("pending_product_id", None)
+        context.user_data.pop("pending_qty", None)
+        context.user_data.pop("pending_total", None)
+
+        await query.answer("❌ Purchase confirmation expired. Please start again.", show_alert=True)
+        return ConversationHandler.END
 
     user_data = update.effective_user
     telegram_user = await get_or_create_telegram_user(user_data)
 
     if query.data == "confirm_purchase_no":
+        context.user_data.pop("pending_product_id", None)
+        context.user_data.pop("pending_qty", None)
+        context.user_data.pop("pending_total", None)
+
         await query.edit_message_text("❌ Purchase cancelled.")
         return ConversationHandler.END
 
@@ -751,6 +863,8 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
             parse_mode="HTML"
         )
         return ConversationHandler.END
+    
+    balance_before = wallet.balance
 
     # Place order if sufficient vouchers exist
     @sync_to_async
@@ -768,7 +882,7 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
                 status="Completed"
             )
             
-            Transaction.objects.create(
+            transaction_obj = Transaction.objects.create(
                 user=telegram_user,
                 order=order,
                 payment_method=None,
@@ -795,42 +909,61 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
                     voucher_code=voucher
                 )
 
-            return order, wallet.balance, assigned_codes
+            return order, wallet.balance, assigned_codes, transaction_obj
 
-    order, new_balance, assigned_codes = await complete_recharge_order_with_vouchers()
+    order, new_balance, assigned_codes, transaction_obj = await complete_recharge_order_with_vouchers()
+    
+    balance_after = new_balance
     
     # Notify admin of the completed order
-    await notify_admin_order_completed(context.bot, order, assigned_codes, product)
+    await notify_admin_order_completed(context.bot, order, assigned_codes, product, tx_id=transaction_obj.tx_id)
 
     voucher_text = "\n".join(assigned_codes)
     file_buffer = io.StringIO(voucher_text)
-    file_buffer.name = f"Order_ID_{order.id}_{product.slug.replace('-', '_')}.txt"
+    
+    slug_title = product.slug.replace("-", " ").replace("_", " ").upper()
+    dt_str = timezone.localtime(order.created_at).strftime("%Y-%m-%d_%H-%M-%S")
+    file_buffer.name = f"{slug_title}_{dt_str}.txt"
     
     description = f"\n🧾 <b>Recharge Description:</b>\n<code>{product.recharge_description}</code>" if product.recharge_description else ""
 
-    await query.edit_message_text(
-        f"✅ <b>Thank you for your purchase!</b>\n\n"
-        f"🛒 Product: <b>{product.name}</b>\n"
-        f"🔢 Quantity: <b>{qty}</b>\n"
-        f"🧾 Order ID: <code>{order.id}</code>"
-        f"💲 Cost: <b>${normalize_amount(total)}</b>\n"
-        f"✅ Status: <b>${normalize_amount(total)}</b>\n"
-        # f"💼 New Balance: <b>${new_balance:.2f}</b>\n"
-        # f"{description}\n\n"
-        # f"📄 Voucher codes are attached as a text file.",
-        f"📝 <b>Note:</b>\n"
-        f"ℹ️ Kindly find the attached text file to check the product information.\n"
-        f"🔒 Do not share the file with anyone else.\n"
-        f"🤔 If you have any problem, feel free to contact us @MSN_GAMERS",
-        parse_mode="HTML"
-    )
-    
-    # Send attached voucher file
+    # ✅ Edit the confirmation message to a short status (optional but clean)
+    await query.edit_message_text("✅ Purchase confirmed. Sending your voucher file…")
+
+    # ✅ Send document + caption in ONE bubble
     file_buffer.seek(0)
     await context.bot.send_document(
-        caption="🎟️ Your voucher codes",
         chat_id=query.from_user.id,
         document=InputFile(file_buffer, filename=file_buffer.name),
+        caption=(
+            f"✅ <b>Thank you for your purchase!</b>\n\n"
+            f"🛒 Product: <b>{product.name}</b>\n"
+            f"🔢 Quantity: <b>{qty}</b>\n"
+            f"🧾 Order ID: <code>{order.id}</code>\n"
+            f"💲 Cost: <b>${fmt_money(total)}</b>\n"
+            f"✅ Status: <b>Completed</b>\n\n"
+            f"📝 <b>Note:</b>\n"
+            f"ℹ️ Kindly check the attached file for product information.\n"
+            f"🔒 Do not share the file with anyone else.\n"
+            f"🤔 If you have any problem, contact us @MSN_GAMERS"
+        ),
+        parse_mode="HTML",
+    )
+    
+    await context.bot.send_message(
+        chat_id=query.from_user.id,
+        text=(
+            f"🧾✨ <b>New Transaction</b> ✨🧾\n\n"
+            f"🆔 <b>Transaction:</b> <code>{transaction_obj.tx_id}</code>\n"
+            f"👤 <b>User ID:</b> <code>{telegram_user.telegram_id}</code>\n"
+            f"🛍️ <b>Type:</b> Buy Product\n"
+            f"💰 <b>Amount:</b> <b>${fmt_money(total)}</b>\n"
+            f"📉 <b>Balance Before:</b> <b>${fmt_money(balance_before)}</b>\n"
+            f"📈 <b>Balance After:</b> <b>${fmt_money(balance_after)}</b>\n"
+            f"✅ <b>Status:</b> Success\n\n"
+            f"📝 <i>Description: Payment for order processing (Order ID: {order.id})</i>"
+        ),
+        parse_mode="HTML"
     )
 
     context.user_data.clear()
@@ -843,7 +976,17 @@ def get_admin_chat_id():
     return obj.chat_id if obj else None
 
 
-async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product):
+@sync_to_async
+def get_current_announcement():
+    # get latest visible announcement
+    qs = Announcement.objects.filter(is_active=True).order_by("-created_at")
+    for a in qs[:20]:  # small cap
+        if a.is_visible_now():
+            return a
+    return None
+
+
+async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product, tx_id=None):
     admin_chat_id = await get_admin_chat_id()
     if not admin_chat_id:
         return  # No admin chat ID set, so don't send
@@ -851,12 +994,16 @@ async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product)
     # voucher_lines = "\n".join([f"🎟️ <code>{code}</code>" for code in assigned_codes])
     voucher_text = "\n".join(assigned_codes)
     file_buffer = io.StringIO(voucher_text)
-    file_buffer.name = f"Order_ID_{order.id}_{product.slug.replace('-', '_')}.txt"
+    
+    slug_title = product.slug.replace("-", " ").replace("_", " ").upper()
+    dt_str = timezone.localtime(order.created_at).strftime("%Y-%m-%d_%H-%M-%S")
+    file_buffer.name = f"{slug_title}_{dt_str}.txt"
     
     message = (
         f"📦 <b>New Completed Order</b>\n\n"
         f"🧑 User: <code>{order.user.telegram_id}</code>\n"
         f"🆔 Order ID: <code>{order.id}</code>\n"
+        f"🧾 Tx ID: <code>{tx_id or 'N/A'}</code>\n"
         f"💲 Total: <b>${normalize_amount(order.total_price)}</b>\n"
         f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"✅ Status: <b>{order.status}</b>\n\n"
@@ -879,20 +1026,24 @@ async def notify_admin_order_completed(bot: Bot, order, assigned_codes, product)
     
     
     
-async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, product):
+async def notify_admin_order_pending(bot: Bot, order, assigned_codes, game_id, product, tx_id=None):
     admin_chat_id = await get_admin_chat_id()
     if not admin_chat_id:
         return  # No admin chat ID set, so don't send
 
     voucher_text = "\n".join(assigned_codes)
     file_buffer = io.StringIO(voucher_text)
-    file_buffer.name = f"Order_ID_{order.id}_{product.slug.replace('-', '_')}.txt"
+    
+    slug_title = product.slug.replace("-", " ").replace("_", " ").upper()
+    dt_str = timezone.localtime(order.created_at).strftime("%Y-%m-%d_%H-%M-%S")
+    file_buffer.name = f"{slug_title}_{dt_str}.txt"
     
     message = (
         f"📦 <b>New Completed Order</b>\n\n"
         f"🧑 User: <code>{order.user.telegram_id}</code>\n"
         f"🧑 <b>Game ID:</b> <code>{game_id}</code>\n"
         f"🆔 Order ID: <code>{order.id}</code>\n"
+        f"🧾 Tx ID: <code>{tx_id or 'N/A'}</code>\n"
         f"💲 Total: <b>${normalize_amount(order.total_price)}</b>\n"
         f"📅 Date: {order.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"✅ Status: <b>{order.status}</b>\n\n"
@@ -1032,7 +1183,7 @@ def complete_recharge_order_with_vouchers(user, product, wallet, qty, total):
             VoucherCode.objects.filter(product=product, is_used=False)[:qty]
         )
         if len(available_vouchers) < qty:
-            return None, None, None, "no_voucher"
+            return None, None, None, "no_voucher", None
 
         wallet.balance -= total
         wallet.save()
@@ -1046,7 +1197,7 @@ def complete_recharge_order_with_vouchers(user, product, wallet, qty, total):
             status="Completed",
         )
         
-        Transaction.objects.create(
+        transaction_obj = Transaction.objects.create(
             user=user,
             order=order,
             payment_method=None,
@@ -1074,7 +1225,7 @@ def complete_recharge_order_with_vouchers(user, product, wallet, qty, total):
                 voucher_code=voucher
             )
 
-        return order, wallet.balance, used_voucher_codes, None
+        return order, wallet.balance, used_voucher_codes, None, transaction_obj
 
 
 @sync_to_async
@@ -1152,7 +1303,7 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
     product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
     if product.recharge_description:
-        order, new_balance, used_voucher_codes, error = await complete_recharge_order_with_vouchers(
+        order, new_balance, used_voucher_codes, error, transaction_obj = await complete_recharge_order_with_vouchers(
             telegram_user, product, wallet, qty, total
         )
 
@@ -1161,7 +1312,7 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
             return ConversationHandler.END
 
         # ✅ Notify admin for completed order
-        await notify_admin_order_completed(context.bot, order, used_voucher_codes, product)
+        await notify_admin_order_completed(context.bot, order, used_voucher_codes, product, tx_id=transaction_obj.tx_id)
 
         if used_voucher_codes:
             voucher_text = "🔑 Voucher Codes are:\n" + "\n".join(f"<code>{code}</code>" for code in used_voucher_codes)
@@ -1172,7 +1323,7 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
         order, new_balance, used_voucher_codes = await complete_recharge_without_description(
             telegram_user, product, wallet, qty, total, pubg_id
         )
-        await notify_admin_order_pending(context.bot, order, used_voucher_codes, pubg_id, product)
+        await notify_admin_order_pending(context.bot, order, used_voucher_codes, pubg_id, product, tx_id=transaction_obj.tx_id)
         voucher_text = ""  # Don't show any voucher message
 
     await query.edit_message_text(
