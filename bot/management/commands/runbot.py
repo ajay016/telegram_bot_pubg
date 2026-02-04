@@ -459,7 +459,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "My Wallet" in text:
         # Fetch wallet and user data
         wallet = await get_wallet_by_telegram_id(telegram_id)
-        print('wallet info: ', wallet)
         if not wallet:
             await update.message.reply_text("❌ Wallet not found.")
             return
