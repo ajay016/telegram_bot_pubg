@@ -210,6 +210,13 @@ class Order(models.Model):
 class VoucherCode(models.Model):
     code       = models.CharField(max_length=50, unique=True)
     product    = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='vouchers')
+    supplier = models.ForeignKey(
+        Supplier, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='vouchers' # Key for the inline
+    )
     is_used    = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -247,7 +254,11 @@ class UploadVoucherCode(models.Model):
             valid_lines.append(code)
 
         for code in set(valid_lines):
-            VoucherCode.objects.get_or_create(code=code, product=self.product)
+            VoucherCode.objects.get_or_create(
+                code=code, 
+                product=self.product,
+                defaults={'supplier': self.supplier} # <--- Save the supplier here
+            )
 
         self.product.update_stock_from_vouchers()
     

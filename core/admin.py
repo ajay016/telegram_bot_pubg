@@ -63,8 +63,20 @@ class ProductAdmin(ModelAdmin):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
-    readonly_fields = ('unit_price',)
+    
+    # Add your custom method name here
+    readonly_fields = ('unit_price', 'get_supplier')
+    
     autocomplete_fields = ('product', 'voucher_code')
+
+    def get_supplier(self, obj):
+        # Check if the item has a voucher, and if that voucher has a supplier
+        if obj.voucher_code and obj.voucher_code.supplier:
+            return obj.voucher_code.supplier.name
+        return "-"
+    
+    # This sets the column header name in the admin
+    get_supplier.short_description = "Voucher Supplier"
 
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
@@ -82,14 +94,27 @@ class OrderItemAdmin(ModelAdmin):
     list_filter = ('product',)
     search_fields = ('order__id', 'product__name', 'voucher_code__code')
     autocomplete_fields = ('order', 'product', 'voucher_code')
+    
+
+class VoucherCodeInline(admin.TabularInline):
+    model = VoucherCode
+    extra = 0
+    # Make fields readonly so the page loads faster and prevents accidental edits
+    readonly_fields = ('code', 'product', 'is_used', 'created_at')
+    can_delete = False
+    show_change_link = True # Adds a button to edit the specific voucher
+    fields = ('code', 'product', 'is_used', 'created_at')
+
+    def has_add_permission(self, request, obj):
+        return False # Prevent adding single vouchers directly inside Supplier
 
 
 @admin.register(VoucherCode)
 class VoucherCodeAdmin(ModelAdmin):
-    list_display = ('code', 'product', 'usage_status', 'created_at')
-    list_filter = ('is_used', 'created_at')
-    search_fields = ('code',)
-    autocomplete_fields = ('product',)
+    list_display = ('code', 'product', 'supplier', 'usage_status', 'created_at') # Added supplier
+    list_filter = ('is_used', 'created_at', 'supplier') # Added supplier filter
+    search_fields = ('code', 'supplier__name') # Added search by supplier name
+    autocomplete_fields = ('product', 'supplier')
 
     def usage_status(self, obj):
         return "🔴 Used" if obj.is_used else "🟢 Available"
@@ -177,16 +202,15 @@ class BinancePayNoteAdmin(ModelAdmin):
     
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
-    """
-    Admin interface for managing Suppliers.
-    """
     list_display = ('name', 'contact_name', 'phone', 'email', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
     search_fields = ('name', 'contact_name', 'email', 'phone')
     ordering = ('-created_at',)
     readonly_fields = ('created_at', 'updated_at')
     
-    # Organize fields into sections for better readability
+    # ADD THE INLINE HERE
+    inlines = [VoucherCodeInline]
+
     fieldsets = (
         ('Company Info', {
             'fields': ('name', 'is_active')
@@ -196,7 +220,7 @@ class SupplierAdmin(admin.ModelAdmin):
         }),
         ('Additional Info', {
             'fields': ('note', 'created_at', 'updated_at'),
-            'classes': ('collapse',)  # Hide this section by default
+            'classes': ('collapse',)
         }),
     )
 
