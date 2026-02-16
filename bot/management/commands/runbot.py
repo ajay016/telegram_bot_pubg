@@ -195,6 +195,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
         return ConversationHandler.END
+    
+    elif data == "my_orders":
+        tg_user = await get_or_create_telegram_user(update.effective_user)
+
+        pdf_buffer = await sync_to_async(generate_order_summary_pdf)(tg_user)
+
+        if not pdf_buffer:
+            await query.message.reply_text(
+                "📭 You have no orders currently.\n\nStart shopping now! 🛍️"
+            )
+            return ConversationHandler.END
+
+        await query.message.reply_document(
+            document=pdf_buffer,
+            filename=f"order_summary_{tg_user.telegram_id}.pdf",
+            caption="📄 Here is your order summary!"
+        )
+        return ConversationHandler.END
         
     elif data == "game_id_recharge_auto":
         recharge_categories = await sync_to_async(list)(RechargeCategory.objects.filter(is_active=True))
