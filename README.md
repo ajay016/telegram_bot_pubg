@@ -1,2 +1,2 @@
-# telegram_bot_pubg
-Telegram USers can Buy PUBG UC Vouchers by interacting with a telegram bot
+# telegram_code_purchase_bot
+Can buy codes for fifferent game in-purchases by using this bot

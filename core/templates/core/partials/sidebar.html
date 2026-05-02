@@ -1,0 +1,74 @@
+<aside class="floating-sidebar">
+    <div class="sidebar-brand">
+        <iconify-icon icon="solar:globus-bold-duotone" style="color: var(--accent);"></iconify-icon>
+        MyPanel
+    </div>
+
+    <div class="sidebar-menu-scroll">
+        
+        <a href="{% url 'dashboard' %}" class="sidebar-link active"> <iconify-icon icon="solar:widget-5-bold-duotone" class="menu-icon"></iconify-icon>
+            Dashboard
+        </a>
+
+        <!-- Customers -->
+        <a href="{% url 'customer_balances' %}" class="sidebar-link {% if request.resolver_match.url_name == 'customer_balances' %}active{% endif %}">
+            <iconify-icon icon="solar:users-group-two-rounded-bold-duotone" class="menu-icon"></iconify-icon>
+            Customers
+        </a>
+        <!-- cusromers -->
+
+
+        <a href="#" class="sidebar-link">
+            <iconify-icon icon="solar:user-bold-duotone" class="menu-icon"></iconify-icon>
+            Users
+        </a>
+
+        <!-- Vouvhers-->
+        <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
+            <iconify-icon icon="solar:ticket-bold-duotone" class="menu-icon"></iconify-icon>
+            Vouchers
+            <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
+        </a>
+
+        <div class="sidebar-submenu-wrapper">
+            <div class="sidebar-submenu-inner">
+                <ul class="sidebar-submenu">
+                    <li><a href="{% url 'upload_vouchers' %}">Upload Codes</a></li>
+                    <li><a href="{% url 'list_voucher_uploads' %}">View Uploads</a></li>
+                </ul>
+            </div>
+        </div>
+        <!-- Vouvhers-->
+
+        <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
+            <iconify-icon icon="solar:box-bold-duotone" class="menu-icon"></iconify-icon>
+            Products
+            <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
+        </a>
+        <div class="sidebar-submenu-wrapper">
+            <div class="sidebar-submenu-inner">
+                <ul class="sidebar-submenu">
+                    <li><a href="#">All Products</a></li>
+                    <li><a href="#">Add Product</a></li>
+                    <li><a href="#">Categories</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
+            <iconify-icon icon="solar:settings-bold-duotone" class="menu-icon"></iconify-icon>
+            Settings
+            <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
+        </a>
+        <div class="sidebar-submenu-wrapper">
+            <div class="sidebar-submenu-inner">
+                <ul class="sidebar-submenu">
+                    <li><a href="#">General</a></li>
+                    <li><a href="#">Security</a></li>
+                    <li><a href="#">Notifications</a></li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+</aside>

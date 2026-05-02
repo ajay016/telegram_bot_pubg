@@ -1,0 +1,310 @@
+/* static/core/assets/css/custom_style.css */
+
+:root {
+    /* Color Palette */
+    --bg-body: #020617; /* Very dark blue/black for the background */
+    
+    /* Uneven, Shiny Gradient Borders via Background-Clip Trick (Expanded 70% Coverage) */
+    --bg-panel: linear-gradient(145deg, #0f172a, #162032) padding-box, 
+                linear-gradient(135deg, rgba(147, 197, 253, 0.9) 0%, rgba(59, 130, 246, 0.5) 65%, rgba(15, 23, 42, 0) 85%, rgba(59, 130, 246, 0.8) 100%) border-box;
+                
+    /* Modern, Vertical-Focused Border Pattern specifically for Sidebar */
+    --bg-sidebar: linear-gradient(145deg, #0f172a, #162032) padding-box, 
+                  linear-gradient(170deg, rgba(147, 197, 253, 0.95) 0%, rgba(59, 130, 246, 0.6) 40%, rgba(59, 130, 246, 0.25) 70%, rgba(15, 23, 42, 0) 85%, rgba(147, 197, 253, 0.8) 100%) border-box;
+                
+    --bg-panel-solid: linear-gradient(#0f172a, #0f172a) padding-box, 
+                      linear-gradient(135deg, rgba(147, 197, 253, 0.9) 0%, rgba(59, 130, 246, 0.4) 60%, rgba(59, 130, 246, 0.7) 100%) border-box;
+    
+    /* Upgraded Modern Hover Background */
+    --bg-hover: linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0) 100%);
+    
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent: #3b82f6;
+    
+    /* Layout Variables */
+    --gap-size: 1.25rem;
+    --border-radius: 1.2rem;
+    --sidebar-width: 280px;
+    
+    /* Glowing Border Effects */
+    --panel-border: 1px solid transparent; /* Must be transparent so the shiny border-box gradient shows through */
+    --separator-border: 1px solid rgba(59, 130, 246, 0.15); /* For flat inner dividers */
+    --panel-glow: 0 0 20px 0 rgba(59, 130, 246, 0.15), 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+body {
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* Floating Layout Containers */
+.layout-wrapper {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.main-content-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* Prevents flexbox text overflow issues */
+}
+
+/* --- Floating Sidebar --- */
+.floating-sidebar {
+    width: var(--sidebar-width);
+    margin: var(--gap-size) 0 var(--gap-size) var(--gap-size);
+    background: var(--bg-sidebar); /* Switched to the new sidebar-specific pattern */
+    border-radius: var(--border-radius);
+    border: var(--panel-border);
+    box-shadow: var(--panel-glow);
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-brand {
+    padding: 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    border-bottom: var(--separator-border);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sidebar-menu-scroll {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 1rem 0.5rem;
+}
+
+/* Custom Scrollbar for Sidebar */
+.sidebar-menu-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.sidebar-menu-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar-menu-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+/* Sidebar Links */
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem 0.75rem 0.75rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-radius: 0.5rem;
+    margin-bottom: 0.25rem;
+    border-left: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+/* Upgraded Active/Hover state for Sidebar Links */
+.sidebar-link:hover, .sidebar-link[aria-expanded="true"] {
+    background: var(--bg-hover);
+    color: var(--text-main);
+    border-left-color: var(--accent);
+}
+
+.sidebar-link iconify-icon.menu-icon {
+    font-size: 1.25rem;
+    margin-right: 0.75rem;
+}
+
+.sidebar-link .arrow-icon {
+    margin-left: auto;
+    transition: transform 0.3s ease;
+}
+
+/* Rotate arrow when submenu is open */
+.sidebar-link[aria-expanded="true"] .arrow-icon {
+    transform: rotate(180deg);
+}
+
+/* Submenu */
+.sidebar-submenu {
+    padding-left: 2.5rem;
+    list-style: none;
+    margin: 0;
+}
+
+/* Upgraded Submenu Links */
+.sidebar-submenu a {
+    display: block;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.15rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.9rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+    position: relative; /* ADDED: Crucial for positioning the glowing pointer */
+}
+
+.sidebar-submenu a:hover {
+    color: var(--accent);
+    background: rgba(59, 130, 246, 0.1);
+    transform: translateX(4px); 
+}
+
+/* --- Glowing Active States --- */
+/* Active state for main sidebar links and active parent triggers */
+.sidebar-link.active {
+    background: linear-gradient(145deg, #0f172a, #162032) padding-box, 
+                linear-gradient(135deg, rgba(147, 197, 253, 0.9) 0%, rgba(59, 130, 246, 0.4) 100%) border-box;
+    color: var(--text-main);
+    border: 1px solid transparent;
+    border-left: 3px solid var(--accent); 
+    box-shadow: 0 0 15px 0 rgba(59, 130, 246, 0.25);
+}
+
+/* CREATIVE: Active state for submenu links */
+.sidebar-submenu a.active {
+    color: var(--accent);
+    text-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+    /* background: rgba(59, 130, 246, 0.1); */
+    transform: translateX(12px); /* Shift further right to make room for pointer */
+    /* border: 1px solid rgba(59, 130, 246, 0.3); */
+    /* box-shadow: 0 0 10px 0 rgba(59, 130, 246, 0.15); */
+}
+
+/* CREATIVE: The glowing pointer/dot */
+.sidebar-submenu a.active::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    background-color: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.8);
+}
+/* Active state for main sidebar links */
+
+/* --- Custom Smooth Collapse CSS --- */
+
+.sidebar-submenu-wrapper {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-submenu-wrapper.open {
+    grid-template-rows: 1fr;
+}
+
+.sidebar-submenu-inner {
+    overflow: hidden;
+}
+
+/* Ensure the arrow still rotates smoothly using the aria attribute */
+.sidebar-link[aria-expanded="true"] .arrow-icon {
+    transform: rotate(180deg);
+}
+/* --- Custom Smooth Collapse CSS --- */
+
+/* --- Floating Navbar --- */
+.floating-navbar {
+    margin: var(--gap-size) var(--gap-size) 0 var(--gap-size);
+    background: var(--bg-panel);
+    border-radius: var(--border-radius);
+    border: var(--panel-border);
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--panel-glow);
+}
+
+/* Navbar Hover Dropdown */
+.hover-dropdown {
+    position: relative;
+}
+
+.hover-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 10px;
+    background: var(--bg-panel-solid);
+    border: var(--panel-border);
+    border-radius: 0.5rem;
+    min-width: 150px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    box-shadow: var(--panel-glow);
+    z-index: 1000;
+}
+
+.hover-dropdown:hover .hover-dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.hover-dropdown-menu a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    border-bottom: var(--separator-border); 
+}
+.hover-dropdown-menu a:last-child {
+    border-bottom: none;
+}
+.hover-dropdown-menu a:hover {
+    color: var(--text-main);
+    background: rgba(59, 130, 246, 0.1); /* Match the new theme */
+}
+
+/* Content Area */
+.content-area {
+    padding: var(--gap-size);
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+/* Footer */
+.floating-footer {
+    margin: 0 var(--gap-size) var(--gap-size) var(--gap-size);
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+/* --- Responsive Mobile Layout --- */
+@media (max-width: 991.98px) {
+    .layout-wrapper {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+    
+    .floating-sidebar {
+        width: auto; /* Overrides the fixed 280px */
+        margin: var(--gap-size) var(--gap-size) 0 var(--gap-size);
+        flex: 0 0 auto;
+    }
+    
+    .sidebar-menu-scroll {
+        max-height: 250px; /* Keeps sidebar scrollable on mobile so it doesn't hide main content */
+    }
+    
+    .main-content-wrapper, .content-area {
+        overflow: visible; 
+    }
+}

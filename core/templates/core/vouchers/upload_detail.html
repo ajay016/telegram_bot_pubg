@@ -1,0 +1,355 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Upload Details - MyPanel{% endblock %}
+
+{% block custom_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+
+<style>
+    /* DataTables Base Styling (Reused) */
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        background-color: var(--bg-body);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-main);
+        border-radius: 0.5rem;
+        padding: 0.4rem 0.75rem;
+    }
+    .dataTables_wrapper .dataTables_length select:focus,
+    .dataTables_wrapper .dataTables_filter input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+    }
+    table.dataTable.table-striped > tbody > tr:nth-of-type(odd) > * {
+        background-color: rgba(255, 255, 255, 0.02);
+        color: var(--text-main);
+    }
+    table.dataTable.table-striped > tbody > tr:nth-of-type(even) > * {
+        background-color: transparent;
+        color: var(--text-main);
+    }
+    table.dataTable > thead > tr > th {
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+    table.dataTable > tbody > tr > td {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        vertical-align: middle;
+    }
+    .page-item.active .page-link { background-color: var(--accent); border-color: var(--accent); }
+    .page-link { background-color: var(--bg-panel-solid); border-color: rgba(59, 130, 246, 0.2); color: var(--text-main); }
+    .page-link:hover { background-color: rgba(59, 130, 246, 0.1); color: var(--accent); }
+
+    /* Stats Card styling */
+    .stats-card {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+    
+    .stats-icon {
+        background: var(--accent);
+        color: white;
+        width: 60px;
+        height: 60px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        box-shadow: 0 4px 15px -3px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Modern Checkbox */
+    .modern-checkbox {
+        width: 1.2rem;
+        height: 1.2rem;
+        background-color: var(--bg-body);
+        border: 2px solid rgba(59, 130, 246, 0.4);
+        border-radius: 0.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .modern-checkbox:checked {
+        background-color: var(--accent);
+        border-color: var(--accent);
+    }
+    .modern-checkbox:focus {
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+
+    /* Action Buttons (Reused from previous) */
+    .action-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 35px; height: 35px; border-radius: 0.5rem; transition: all 0.2s ease;
+        border: none; cursor: pointer; text-decoration: none;
+    }
+    .action-btn.delete-btn { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .action-btn.delete-btn:hover { background: #ef4444; color: #fff; transform: translateY(-2px); }
+
+    /* Modal Buttons */
+    .modern-btn-cancel {
+        background: var(--bg-body); color: var(--text-muted); border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 0.6rem 1.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease;
+    }
+    .modern-btn-cancel:hover { background: rgba(255, 255, 255, 0.05); color: #fff; transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); }
+    
+    .modern-btn-danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #fff; border: none;
+        padding: 0.6rem 1.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease;
+        display: inline-flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 15px -3px rgba(239, 68, 68, 0.4);
+    }
+    .modern-btn-danger:hover { transform: translateY(-2px); box-shadow: 0 6px 20px -3px rgba(239, 68, 68, 0.6); background: linear-gradient(135deg, #f87171 0%, #ef4444 100%); }
+    .modern-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <a href="{% url 'list_voucher_uploads' %}" class="text-muted text-decoration-none d-inline-flex align-items-center mb-2 hover-accent">
+            <iconify-icon icon="solar:arrow-left-linear" class="me-1"></iconify-icon> Back to Uploads
+        </a>
+        <h2 class="mb-0">{{ upload.name|default:"Unnamed Upload" }}</h2>
+        <small class="text-muted">Product: <span class="text-light">{{ upload.product.name }}</span> | Uploaded on: {{ upload.uploaded_at|date:"M d, Y" }}</small>
+    </div>
+</div>
+
+<div id="alert-container"></div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="stats-card">
+            <div class="stats-icon">
+                <iconify-icon icon="solar:ticket-bold-duotone"></iconify-icon>
+            </div>
+            <div>
+                <h3 class="mb-0 fw-bold" style="color: var(--text-main);" id="totalQuantity">{{ total_codes }}</h3>
+                <span style="color: var(--text-muted); font-size: 0.9rem;">Total Active Codes</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <button id="triggerBulkDeleteBtn" class="modern-btn-danger" disabled>
+        <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+        Delete Selected (<span id="selectedCount">0</span>)
+    </button>
+</div>
+
+<div class="card bg-dark border-secondary p-4" style="border-radius: 1rem; background: var(--bg-panel) !important; border: var(--panel-border) !important; box-shadow: var(--panel-glow);">
+    <div class="table-responsive">
+        <table id="codesTable" class="table table-striped w-100">
+            <thead>
+                <tr>
+                    <th style="width: 40px; text-align: center;">
+                        <input type="checkbox" id="selectAllCheckbox" class="form-check-input modern-checkbox">
+                    </th>
+                    <th># S/L</th>
+                    <th>Voucher Code</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for code in voucher_codes %}
+                <tr id="row-{{ code.id }}">
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input modern-checkbox code-checkbox" value="{{ code.id }}">
+                    </td>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="font-monospace text-light fw-medium tracking-wider">{{ code.code }}</td>
+                    <td class="text-end">
+                        <button onclick="openDeleteModal({{ code.id }}, '{{ code.code|escapejs }}')" class="action-btn delete-btn" title="Delete Code">
+                            <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2 text-danger">
+                    <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light" id="deleteModalBody">
+                Are you sure you want to delete <strong id="deleteTargetName" class="text-white"></strong>? 
+                <br><br>
+                <small class="text-muted">This action cannot be undone. Product stock will be updated automatically.</small>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmDeleteBtn" class="modern-btn-danger">
+                    <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% csrf_token %}
+{% endblock %}
+
+{% block custom_js %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    let codeIdsToDelete = []; // Array to handle single or multiple IDs
+    let deleteModalElement = null;
+    const productId = {{ upload.product.id }}; // Needed for stock update
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize DataTable. Disable sorting on Checkbox (0) and Actions (3)
+        const table = $('#codesTable').DataTable({
+            "order": [[ 1, "asc" ]], 
+            "pageLength": 25,
+            "columnDefs": [
+                { "orderable": false, "targets": [0, 3] }
+            ],
+            "language": {
+                "search": "_INPUT_",
+                "searchPlaceholder": "Search codes..."
+            }
+        });
+
+        // Setup UI Elements
+        deleteModalElement = new bootstrap.Modal(document.getElementById('deleteModal'));
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        const triggerBulkBtn = document.getElementById('triggerBulkDeleteBtn');
+        const selectedCountSpan = document.getElementById('selectedCount');
+
+        // Function to update Bulk Delete Button state
+        function updateBulkDeleteState() {
+            // Get checked boxes across ALL pages using DataTables API
+            const checkedBoxes = table.$('.code-checkbox:checked');
+            const count = checkedBoxes.length;
+            
+            selectedCountSpan.textContent = count;
+            triggerBulkBtn.disabled = count === 0;
+            
+            // Manage Select All state
+            const totalBoxes = table.$('.code-checkbox').length;
+            selectAllCheckbox.checked = (count > 0 && count === totalBoxes);
+        }
+
+        // Handle "Select All" click
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            // Apply to all rows using DataTables node()
+            table.$('.code-checkbox').prop('checked', isChecked);
+            updateBulkDeleteState();
+        });
+
+        // Handle individual checkbox clicks (event delegation via DataTables)
+        $('#codesTable tbody').on('change', '.code-checkbox', function() {
+            updateBulkDeleteState();
+        });
+
+        // Trigger Bulk Delete Modal
+        triggerBulkBtn.addEventListener('click', () => {
+            codeIdsToDelete = [];
+            table.$('.code-checkbox:checked').each(function() {
+                codeIdsToDelete.push(parseInt($(this).val()));
+            });
+            
+            document.getElementById('deleteTargetName').textContent = `${codeIdsToDelete.length} selected codes`;
+            deleteModalElement.show();
+        });
+
+        // Trigger Individual Delete Modal (Attached globally below)
+        window.openDeleteModal = function(id, codeStr) {
+            codeIdsToDelete = [id]; // Set array to single ID
+            document.getElementById('deleteTargetName').textContent = `the code: ${codeStr}`;
+            deleteModalElement.show();
+        };
+
+        // Handle Confirm Delete Button in Modal
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            if (codeIdsToDelete.length === 0) return;
+            
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<iconify-icon icon="solar:hourglass-bold-duotone"></iconify-icon> Deleting...';
+            btn.disabled = true;
+
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            fetch("{% url 'delete_voucher_codes' %}", {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    code_ids: codeIdsToDelete,
+                    product_id: productId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const alertContainer = document.getElementById('alert-container');
+                if (data.status === 'success') {
+                    // Remove rows from DataTable
+                    codeIdsToDelete.forEach(id => {
+                        table.row($(`#row-${id}`)).remove();
+                    });
+                    table.draw(); // Redraw table
+
+                    // Update Quantity display
+                    const qtyEl = document.getElementById('totalQuantity');
+                    qtyEl.textContent = parseInt(qtyEl.textContent) - codeIdsToDelete.length;
+
+                    // Reset Bulk UI
+                    selectAllCheckbox.checked = false;
+                    updateBulkDeleteState();
+
+                    alertContainer.innerHTML = `
+                        <div class="modern-alert success" style="display:flex;">
+                            <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                            <div>${data.message}</div>
+                        </div>`;
+                } else {
+                    alertContainer.innerHTML = `
+                        <div class="modern-alert error" style="display:flex;">
+                            <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                            <div>${data.message}</div>
+                        </div>`;
+                }
+                deleteModalElement.hide();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                deleteModalElement.hide();
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                codeIdsToDelete = []; // Reset
+            });
+        });
+    });
+</script>
+{% endblock %}

@@ -1,8 +1,17 @@
 from django.contrib import admin
-from .models import *
+from django.shortcuts import redirect
+from unfold.decorators import action
 from unfold.admin import ModelAdmin
 from unfold.admin import TabularInline
 from django.contrib import messages
+from bot.tg_bot.utils import trigger_broadcast
+from .models import *
+
+
+
+
+
+
 
 
 
@@ -63,20 +72,8 @@ class ProductAdmin(ModelAdmin):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
-    
-    # Add your custom method name here
-    readonly_fields = ('unit_price', 'get_supplier')
-    
+    readonly_fields = ('unit_price',)
     autocomplete_fields = ('product', 'voucher_code')
-
-    def get_supplier(self, obj):
-        # Check if the item has a voucher, and if that voucher has a supplier
-        if obj.voucher_code and obj.voucher_code.supplier:
-            return obj.voucher_code.supplier.name
-        return "-"
-    
-    # This sets the column header name in the admin
-    get_supplier.short_description = "Voucher Supplier"
 
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
@@ -94,27 +91,14 @@ class OrderItemAdmin(ModelAdmin):
     list_filter = ('product',)
     search_fields = ('order__id', 'product__name', 'voucher_code__code')
     autocomplete_fields = ('order', 'product', 'voucher_code')
-    
-
-class VoucherCodeInline(admin.TabularInline):
-    model = VoucherCode
-    extra = 0
-    # Make fields readonly so the page loads faster and prevents accidental edits
-    readonly_fields = ('code', 'product', 'is_used', 'created_at')
-    can_delete = False
-    show_change_link = True # Adds a button to edit the specific voucher
-    fields = ('code', 'product', 'is_used', 'created_at')
-
-    def has_add_permission(self, request, obj):
-        return False # Prevent adding single vouchers directly inside Supplier
 
 
 @admin.register(VoucherCode)
 class VoucherCodeAdmin(ModelAdmin):
-    list_display = ('code', 'product', 'supplier', 'usage_status', 'created_at') # Added supplier
-    list_filter = ('is_used', 'created_at', 'supplier') # Added supplier filter
-    search_fields = ('code', 'supplier__name') # Added search by supplier name
-    autocomplete_fields = ('product', 'supplier')
+    list_display = ('code', 'product', 'usage_status', 'created_at')
+    list_filter = ('is_used', 'created_at')
+    search_fields = ('code',)
+    autocomplete_fields = ('product',)
 
     def usage_status(self, obj):
         return "🔴 Used" if obj.is_used else "🟢 Available"
@@ -202,15 +186,16 @@ class BinancePayNoteAdmin(ModelAdmin):
     
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
+    """
+    Admin interface for managing Suppliers.
+    """
     list_display = ('name', 'contact_name', 'phone', 'email', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
     search_fields = ('name', 'contact_name', 'email', 'phone')
     ordering = ('-created_at',)
     readonly_fields = ('created_at', 'updated_at')
     
-    # ADD THE INLINE HERE
-    inlines = [VoucherCodeInline]
-
+    # Organize fields into sections for better readability
     fieldsets = (
         ('Company Info', {
             'fields': ('name', 'is_active')
@@ -220,7 +205,7 @@ class SupplierAdmin(admin.ModelAdmin):
         }),
         ('Additional Info', {
             'fields': ('note', 'created_at', 'updated_at'),
-            'classes': ('collapse',)
+            'classes': ('collapse',)  # Hide this section by default
         }),
     )
 
@@ -265,11 +250,18 @@ class AdminChatIDAdmin(admin.ModelAdmin):
     
     
 @admin.register(Announcement)
-class AnnouncementAdmin(admin.ModelAdmin):
-    list_display = ("id", "title", "is_active", "has_image", "has_attachment", "show_from", "show_until", "created_at")
-    list_filter = ("is_active",)
+class AnnouncementAdmin(ModelAdmin):
+    list_display = ("id", "title", "is_broadcasted", "is_active", "has_image", "has_attachment", "show_from", "show_until", "created_at")
+    list_filter = ("is_active", "is_broadcasted")
     search_fields = ("title", "message")
     ordering = ("-created_at",)
+    
+    # 1. THIS PUTS IT IN THE DROPDOWN (Standard Django Bulk Action)
+    actions = ["broadcast_dropdown"]
+    
+    # 2. THIS PUTS BUTTONS ON THE ROWS AND EDIT PAGE (Unfold Actions)
+    actions_row = ["broadcast_button"]
+    actions_detail = ["broadcast_button"]
     
     fields = (
         "title",
@@ -280,6 +272,46 @@ class AnnouncementAdmin(admin.ModelAdmin):
         ("show_from", "show_until"),
     )
     
+    # --- DROPDOWN LOGIC ---
+    @admin.action(description="📢 Broadcast to Telegram (Dropdown)")
+    def broadcast_dropdown(self, request, queryset):
+        for announcement in queryset:
+            if announcement.is_broadcasted:
+                self.message_user(
+                    request, 
+                    f"Skipped '{announcement.title}' - it was already broadcasted.", 
+                    level=messages.WARNING
+                )
+                continue
+            
+            trigger_broadcast(announcement.id)
+            self.message_user(
+                request, 
+                f"Successfully broadcasted '{announcement.title}' to all users!", 
+                level=messages.SUCCESS
+            )
+
+    # --- BUTTON LOGIC ---
+    @action(description="📢 Broadcast Now", url_path="broadcast-now")
+    def broadcast_button(self, request, object_id):
+        announcement = Announcement.objects.get(pk=object_id)
+        
+        if announcement.is_broadcasted:
+            self.message_user(
+                request, 
+                f"Skipped '{announcement.title}' - it was already broadcasted.", 
+                level=messages.WARNING
+            )
+        else:
+            trigger_broadcast(announcement.id)
+            self.message_user(
+                request, 
+                f"Successfully broadcasted '{announcement.title}' to all users!", 
+                level=messages.SUCCESS
+            )
+            
+        return redirect(request.META.get('HTTP_REFERER', '/admin/'))
+
     def has_image(self, obj):
         return bool(obj.image)
     has_image.boolean = True

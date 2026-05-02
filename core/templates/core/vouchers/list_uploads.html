@@ -1,0 +1,309 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Voucher Uploads - MyPanel{% endblock %}
+
+{% block custom_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+
+<style>
+    /* Modern DataTables Dark Theme Overrides */
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        background-color: var(--bg-body);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-main);
+        border-radius: 0.5rem;
+        padding: 0.4rem 0.75rem;
+    }
+    .dataTables_wrapper .dataTables_length select:focus,
+    .dataTables_wrapper .dataTables_filter input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+    }
+    table.dataTable.table-striped > tbody > tr:nth-of-type(odd) > * {
+        background-color: rgba(255, 255, 255, 0.02);
+        color: var(--text-main);
+    }
+    table.dataTable.table-striped > tbody > tr:nth-of-type(even) > * {
+        background-color: transparent;
+        color: var(--text-main);
+    }
+    table.dataTable > thead > tr > th {
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+    table.dataTable > tbody > tr > td {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        vertical-align: middle;
+    }
+    /* Pagination styling */
+    .page-item.active .page-link {
+        background-color: var(--accent);
+        border-color: var(--accent);
+    }
+    .page-link {
+        background-color: var(--bg-panel-solid);
+        border-color: rgba(59, 130, 246, 0.2);
+        color: var(--text-main);
+    }
+    .page-link:hover {
+        background-color: rgba(59, 130, 246, 0.1);
+        color: var(--accent);
+    }
+
+    /* Action Buttons */
+    .action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 35px;
+        height: 35px;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+    }
+    .action-btn.view-btn {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--accent);
+    }
+    .action-btn.view-btn:hover {
+        background: var(--accent);
+        color: #fff;
+        transform: translateY(-2px);
+    }
+    .action-btn.delete-btn {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+    }
+    .action-btn.delete-btn:hover {
+        background: #ef4444;
+        color: #fff;
+        transform: translateY(-2px);
+    }
+    /* Action Buttons */
+
+    /* Modal Modern Buttons */
+    .modern-btn-cancel {
+        background: var(--bg-body);
+        color: var(--text-muted);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .modern-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .modern-btn-danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: #fff;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 4px 15px -3px rgba(239, 68, 68, 0.4);
+    }
+    .modern-btn-danger:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -3px rgba(239, 68, 68, 0.6);
+        background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    }
+    .modern-btn-danger:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none;
+    }
+    /* Modal Modern Buttons */
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-center">
+    <h2>View Uploaded Vouchers</h2>
+    <a href="{% url 'upload_vouchers' %}" class="modern-btn" style="text-decoration: none;">
+        <iconify-icon icon="solar:add-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+        New Upload
+    </a>
+</div>
+
+<div id="alert-container"></div>
+
+<div class="card bg-dark border-secondary p-4" style="border-radius: 1rem; background: var(--bg-panel) !important; border: var(--panel-border) !important; box-shadow: var(--panel-glow);">
+    <div class="table-responsive">
+        <table id="uploadsTable" class="table table-striped w-100">
+            <thead>
+                <tr>
+                    <th># S/L</th>
+                    <th>Name</th>
+                    <th>Product</th>
+                    <th>Supplier</th>
+                    <th>Upload Date</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for upload in uploads %}
+                <tr id="row-{{ upload.id }}">
+                    <td>{{ forloop.counter }}</td>
+                    <td>
+                        <a href="{% url 'view_voucher_upload_detail' upload.id %}" class="text-light fw-medium text-decoration-none hover-accent">
+                            {{ upload.name|default:"Unnamed Upload" }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'view_voucher_upload_detail' upload.id %}" class="text-light text-decoration-none hover-accent">
+                            {{ upload.product.name }}
+                        </a>
+                    </td>
+                    <td>{{ upload.supplier.name|default:"<span class='text-muted'>N/A</span>"|safe }}</td>
+                    <td>{{ upload.uploaded_at|date:"M d, Y H:i" }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'view_voucher_upload_detail' upload.id %}" class="action-btn view-btn me-2" title="View/Edit">
+                            <iconify-icon icon="solar:eye-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                        </a>
+                        <button onclick="openDeleteModal({{ upload.id }}, '{{ upload.name|default:'this upload'|escapejs }}')" class="action-btn delete-btn" title="Delete">
+                            <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2 text-danger">
+                    <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                Are you sure you want to delete <strong id="deleteTargetName" class="text-white"></strong>? 
+                <br><br>
+                <small class="text-muted">Note: This will delete the upload record, but check your database rules to see if it removes the underlying voucher codes.</small>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmDeleteBtn" class="modern-btn-danger">
+                    <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                    Delete Permanently
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% csrf_token %}
+
+{% endblock %}
+
+{% block custom_js %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    let currentDeleteId = null;
+    let deleteModalElement = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize DataTable
+        $('#uploadsTable').DataTable({
+            "order": [[ 3, "desc" ]], // Sort by Upload Date descending by default
+            "pageLength": 25,
+            "language": {
+                "search": "_INPUT_",
+                "searchPlaceholder": "Search records..."
+            }
+        });
+
+        // Initialize Bootstrap Modal
+        deleteModalElement = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+        // Handle Delete Confirmation
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            if (!currentDeleteId) return;
+            
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<iconify-icon icon="solar:hourglass-bold-duotone"></iconify-icon> Deleting...';
+            btn.disabled = true;
+
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            // Dynamically construct URL
+            const url = `{% url 'delete_voucher_upload' 0 %}`.replace('0', currentDeleteId);
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const alertContainer = document.getElementById('alert-container');
+                if (data.status === 'success') {
+                    // Remove row from DataTable
+                    const table = $('#uploadsTable').DataTable();
+                    table.row($(`#row-${currentDeleteId}`)).remove().draw();
+
+                    alertContainer.innerHTML = `
+                        <div class="modern-alert success" style="display:flex;">
+                            <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                            <div>${data.message}</div>
+                        </div>`;
+                } else {
+                    alertContainer.innerHTML = `
+                        <div class="modern-alert error" style="display:flex;">
+                            <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                            <div>${data.message}</div>
+                        </div>`;
+                }
+                deleteModalElement.hide();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                deleteModalElement.hide();
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                currentDeleteId = null;
+            });
+        });
+    });
+
+    // Global function to trigger modal
+    window.openDeleteModal = function(id, name) {
+        currentDeleteId = id;
+        document.getElementById('deleteTargetName').textContent = name;
+        deleteModalElement.show();
+    };
+</script>
+{% endblock %}

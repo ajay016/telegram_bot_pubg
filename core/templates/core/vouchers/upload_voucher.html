@@ -1,0 +1,228 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Upload Vouchers - MyPanel{% endblock %}
+
+{% block custom_css %}
+<style>
+    /* --- Form Elements --- */
+    .modern-label {
+        display: block;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .modern-input, .modern-select {
+        width: 100%;
+        background-color: var(--bg-body);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        color: var(--text-main);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+    }
+
+    .modern-input:focus, .modern-select:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    }
+
+    .modern-input::file-selector-button {
+        background: var(--bg-panel);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-main);
+        padding: 0.5rem 1rem;
+        border-radius: 0.3rem;
+        margin-right: 1rem;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+
+    .modern-input::file-selector-button:hover {
+        background: rgba(59, 130, 246, 0.1);
+    }
+
+    .modern-btn {
+        background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
+        color: #fff;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 4px 15px -3px rgba(59, 130, 246, 0.4);
+    }
+
+    .modern-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -3px rgba(59, 130, 246, 0.6);
+    }
+
+    .modern-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    /* --- Alert Messages (Reduced Opacity) --- */
+    .modern-alert {
+        padding: 1rem 1.25rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+        display: none; /* Hidden by default */
+        align-items: center;
+        gap: 0.75rem;
+        animation: fadeIn 0.4s ease forwards;
+    }
+
+    .modern-alert.success {
+        display: flex;
+        background-color: rgba(34, 197, 94, 0.1); /* Reduced opacity green */
+        color: #4ade80; /* Brighter green text */
+        border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .modern-alert.error {
+        display: flex;
+        background-color: rgba(239, 68, 68, 0.1); /* Reduced opacity red */
+        color: #f87171; /* Brighter red text */
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+{% endblock custom_css %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-center">
+    <h2>Upload Voucher Codes</h2>
+</div>
+
+<div class="card bg-dark border-secondary p-4" style="border-radius: 1rem; background: var(--bg-panel) !important; border: var(--panel-border) !important; box-shadow: var(--panel-glow);">
+
+    <form id="voucherUploadForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="row mb-4">
+            <div class="col-12">
+                <label for="nameInput" class="modern-label">Upload Name *</label>
+                <input type="text" id="nameInput" name="name" class="modern-input" placeholder="e.g., Batch 1 - May 2026" required>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="productSelect" class="modern-label">Target Product *</label>
+                <select id="productSelect" name="product" class="modern-select" required>
+                    <option value="" disabled selected>-- Select a Product --</option>
+                    {% for product in products %}
+                        <option value="{{ product.id }}">{{ product.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-6 mt-3 mt-md-0">
+                <label for="supplierSelect" class="modern-label">Supplier (Optional)</label>
+                <select id="supplierSelect" name="supplier" class="modern-select">
+                    <option value="" selected>-- Select a Supplier --</option>
+                    {% for supplier in suppliers %}
+                        <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <label for="fileInput" class="modern-label">Voucher File (.txt only) *</label>
+                <input type="file" id="fileInput" name="file" class="modern-input" accept=".txt" required>
+                <small class="text-muted mt-2 d-block">
+                    <iconify-icon icon="solar:info-circle-bold-duotone" style="vertical-align: middle;"></iconify-icon> 
+                    Ensure the file contains one voucher code per line. Empty lines will be ignored.
+                </small>
+            </div>
+        </div>
+        <div id="alert-container"></div>
+        <div class="d-flex justify-content-end mt-4">
+            <button type="submit" id="submitBtn" class="modern-btn">
+                <iconify-icon icon="solar:cloud-upload-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                <span>Upload & Process</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('voucherUploadForm');
+    const alertContainer = document.getElementById('alert-container');
+    const submitBtn = document.getElementById('submitBtn');
+    const btnText = submitBtn.querySelector('span');
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        // Reset UI
+        alertContainer.innerHTML = '';
+        submitBtn.disabled = true;
+        btnText.textContent = 'Processing...';
+
+        const formData = new FormData(form);
+
+        fetch("{% url 'upload_vouchers' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json().then(data => ({ status: response.status, body: data })))
+        .then(res => {
+            const data = res.body;
+            let alertHtml = '';
+
+            if (res.status === 200 && data.status === 'success') {
+                alertHtml = `
+                    <div class="modern-alert success">
+                        <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                        <div>${data.message}</div>
+                    </div>`;
+                form.reset(); // Clear the form on success
+            } else {
+                alertHtml = `
+                    <div class="modern-alert error">
+                        <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                        <div>${data.message || 'An unexpected error occurred.'}</div>
+                    </div>`;
+            }
+
+            alertContainer.innerHTML = alertHtml;
+        })
+        .catch(error => {
+            alertContainer.innerHTML = `
+                <div class="modern-alert error">
+                    <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    <div>Network error. Please check your connection and try again.</div>
+                </div>`;
+            console.error('Upload error:', error);
+        })
+        .finally(() => {
+            // Restore button state
+            submitBtn.disabled = false;
+            btnText.textContent = 'Upload & Process';
+        });
+    });
+});
+</script>
+{% endblock %}

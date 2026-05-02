@@ -1,0 +1,398 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Customer Balances - MyPanel{% endblock %}
+
+{% block custom_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+
+<style>
+    /* Modern Form Inputs for Modals */
+    .modern-input {
+        background-color: rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-main);
+        border-radius: 0.5rem;
+        padding: 0.6rem 1rem;
+        width: 100%;
+        transition: all 0.3s ease;
+    }
+    .modern-input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+    }
+    .modern-input:disabled {
+        background-color: rgba(255, 255, 255, 0.05);
+        color: var(--text-muted);
+        cursor: not-allowed;
+    }
+    
+    /* Summary Cards in Modal */
+    .summary-box {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        text-align: center;
+        flex: 1;
+    }
+    .summary-box h4 { font-size: 1.5rem; margin-bottom: 0.25rem; font-weight: 700; }
+    .summary-box p { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0; text-transform: uppercase; letter-spacing: 1px; }
+    
+    .text-deposit { color: #10b981; } /* Green */
+    .text-spend { color: #ef4444; } /* Red */
+    .text-balance { color: var(--accent); } /* Blue */
+
+    /* DataTables Base Styling */
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input { background-color: var(--bg-body); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--text-main); border-radius: 0.5rem; padding: 0.4rem 0.75rem; }
+    table.dataTable.table-striped > tbody > tr:nth-of-type(odd) > * { background-color: rgba(255, 255, 255, 0.02); color: var(--text-main); }
+    table.dataTable.table-striped > tbody > tr:nth-of-type(even) > * { background-color: transparent; color: var(--text-main); }
+    table.dataTable > thead > tr > th { border-bottom: 1px solid rgba(59, 130, 246, 0.2); color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.85rem; }
+    table.dataTable > tbody > tr > td { border-bottom: 1px solid rgba(255, 255, 255, 0.05); vertical-align: middle; }
+    .page-item.active .page-link { background-color: var(--accent); border-color: var(--accent); }
+    .page-link { background-color: var(--bg-panel-solid); border-color: rgba(59, 130, 246, 0.2); color: var(--text-main); }
+
+    /* Buttons */
+    .action-btn { display: inline-flex; align-items: center; justify-content: center; width: 35px; height: 35px; border-radius: 0.5rem; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
+    .action-btn.view-btn { background: rgba(59, 130, 246, 0.1); color: var(--accent); }
+    .action-btn.view-btn:hover { background: var(--accent); color: #fff; transform: translateY(-2px); }
+    .action-btn.edit-btn { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+    .action-btn.edit-btn:hover { background: #10b981; color: #fff; transform: translateY(-2px); }
+    .action-btn.delete-btn { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .action-btn.delete-btn:hover { background: #ef4444; color: #fff; transform: translateY(-2px); }
+
+    .modern-btn-cancel { background: var(--bg-body); color: var(--text-muted); border: 1px solid rgba(255, 255, 255, 0.1); padding: 0.6rem 1.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; }
+    .modern-btn-cancel:hover { background: rgba(255, 255, 255, 0.05); color: #fff; transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.2); }
+    .modern-btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #fff; border: none; padding: 0.6rem 1.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px -3px rgba(239, 68, 68, 0.4); }
+    .modern-btn-danger:hover { transform: translateY(-2px); box-shadow: 0 6px 20px -3px rgba(239, 68, 68, 0.6); }
+    .modern-btn-primary { background: linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%); color: #fff; border: none; padding: 0.6rem 1.5rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 15px -3px rgba(59, 130, 246, 0.4); }
+    .modern-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px -3px rgba(59, 130, 246, 0.6); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2>Customer Balances</h2>
+    <p class="text-muted">Manage Telegram users, view spending history, and adjust wallet balances.</p>
+</div>
+
+<div id="alert-container"></div>
+
+<div class="card bg-dark border-secondary p-4" style="border-radius: 1rem; background: var(--bg-panel) !important; border: var(--panel-border) !important; box-shadow: var(--panel-glow);">
+    <div class="table-responsive">
+        <table id="customersTable" class="table table-striped w-100">
+            <thead>
+                <tr>
+                    <th>Telegram ID</th>
+                    <th>Username</th>
+                    <th>Name</th>
+                    <th>Balance</th>
+                    <th>Joined</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="summaryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <iconify-icon icon="solar:wallet-money-bold-duotone" style="font-size: 1.5rem; color: var(--accent);"></iconify-icon>
+                    Financial Summary: <span id="summaryUserName" class="text-light"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex gap-3 justify-content-between flex-wrap">
+                    <div class="summary-box">
+                        <iconify-icon icon="solar:money-bag-bold-duotone" class="text-deposit" style="font-size: 2.5rem; margin-bottom: 10px;"></iconify-icon>
+                        <h4 class="text-deposit" id="sumDeposit">0.00</h4>
+                        <p>Total Deposits</p>
+                    </div>
+                    <div class="summary-box">
+                        <iconify-icon icon="solar:cart-large-bold-duotone" class="text-spend" style="font-size: 2.5rem; margin-bottom: 10px;"></iconify-icon>
+                        <h4 class="text-spend" id="sumSpend">0.00</h4>
+                        <p>Total Spent</p>
+                    </div>
+                    <div class="summary-box" style="border-color: rgba(59, 130, 246, 0.3);">
+                        <iconify-icon icon="solar:wallet-bold-duotone" class="text-balance" style="font-size: 2.5rem; margin-bottom: 10px;"></iconify-icon>
+                        <h4 class="text-balance" id="sumBalance">0.00</h4>
+                        <p>Available Balance</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <iconify-icon icon="solar:pen-bold-duotone" style="font-size: 1.5rem; color: var(--accent);"></iconify-icon>
+                    Edit Customer
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                <form id="editCustomerForm">
+                    <input type="hidden" id="editUserId">
+                    
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase">Telegram ID</label>
+                        <input type="text" id="editTelegramId" class="modern-input" disabled>
+                        <small class="text-muted" style="font-size: 0.7rem;">Telegram ID cannot be changed.</small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small text-uppercase">First Name</label>
+                            <input type="text" id="editFirstName" class="modern-input">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small text-uppercase">Last Name</label>
+                            <input type="text" id="editLastName" class="modern-input">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase">Username</label>
+                        <input type="text" id="editUsername" class="modern-input">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase">Wallet Balance</label>
+                        <input type="number" step="0.001" id="editBalance" class="modern-input" style="border-color: var(--accent); font-weight: bold; font-size: 1.1rem;">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="saveEditBtn" class="modern-btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2 text-danger">
+                    <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                Are you sure you want to delete customer <strong id="deleteTargetName" class="text-white"></strong>? 
+                <br><br>
+                <small class="text-muted">Warning: This will completely wipe their wallet and transaction history. This action cannot be undone.</small>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmDeleteBtn" class="modern-btn-danger">
+                    Delete Permanently
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% csrf_token %}
+{% endblock %}
+
+{% block custom_js %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    let dataTable;
+    let summaryModal, editModal, deleteModal;
+    let actionUserId = null;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize Modals
+        summaryModal = new bootstrap.Modal(document.getElementById('summaryModal'));
+        editModal = new bootstrap.Modal(document.getElementById('editModal'));
+        deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+        // Initialize Server-Side DataTable
+        dataTable = $('#customersTable').DataTable({
+            "processing": true,
+            "serverSide": true,
+            "ajax": {
+                "url": "{% url 'customer_balances_data' %}",
+                "type": "GET"
+            },
+            "columns": [
+                { "data": "telegram_id" },
+                { "data": "username" },
+                { "data": "name" },
+                { "data": "balance", "render": function(data) {
+                    return `<span class="fw-bold" style="color: var(--accent);">$${data}</span>`;
+                }},
+                { "data": "joined" },
+                { 
+                    "data": null,
+                    "orderable": false,
+                    "searchable": false,
+                    "className": "text-end",
+                    "render": function (data, type, row) {
+                        // Pass data as JSON string for easy population of edit form
+                        const safeData = encodeURIComponent(JSON.stringify(row));
+                        return `
+                            <button onclick="openSummary(${row.id})" class="action-btn view-btn me-1" title="View Summary">
+                                <iconify-icon icon="solar:chart-square-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                            <button onclick="openEdit('${safeData}')" class="action-btn edit-btn me-1" title="Edit Customer">
+                                <iconify-icon icon="solar:pen-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                            <button onclick="openDelete(${row.id}, '${row.telegram_id}')" class="action-btn delete-btn" title="Delete Customer">
+                                <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                        `;
+                    }
+                }
+            ],
+            "order": [[ 4, "desc" ]], // Order by 'Joined' date by default
+            "language": {
+                "search": "_INPUT_",
+                "searchPlaceholder": "Search Telegram ID / Name..."
+            }
+        });
+
+        // Handle Edit Save
+        document.getElementById('saveEditBtn').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Saving...';
+            btn.disabled = true;
+
+            const payload = {
+                first_name: document.getElementById('editFirstName').value,
+                last_name: document.getElementById('editLastName').value,
+                username: document.getElementById('editUsername').value.replace('@', ''),
+                balance: parseFloat(document.getElementById('editBalance').value)
+            };
+
+            fetch(`/customers/${actionUserId}/edit/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    dataTable.ajax.reload(null, false); // Reload without resetting pagination
+                    editModal.hide();
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message);
+                }
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+        });
+
+        // Handle Delete Confirm
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Deleting...';
+            btn.disabled = true;
+
+            fetch(`/customers/${actionUserId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    dataTable.ajax.reload(null, false);
+                    deleteModal.hide();
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message);
+                }
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+        });
+    });
+
+    // Open Summary Modal
+    window.openSummary = function(id) {
+        // Reset values to loading state
+        document.getElementById('sumDeposit').textContent = '...';
+        document.getElementById('sumSpend').textContent = '...';
+        document.getElementById('sumBalance').textContent = '...';
+        document.getElementById('summaryUserName').textContent = '';
+
+        fetch(`/customers/${id}/summary/`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('summaryUserName').textContent = data.username;
+                document.getElementById('sumDeposit').textContent = parseFloat(data.total_deposits).toFixed(2);
+                document.getElementById('sumSpend').textContent = parseFloat(data.total_spends).toFixed(2);
+                document.getElementById('sumBalance').textContent = parseFloat(data.balance).toFixed(2);
+                summaryModal.show();
+            });
+    };
+
+    // Open Edit Modal
+    window.openEdit = function(encodedData) {
+        const row = JSON.parse(decodeURIComponent(encodedData));
+        actionUserId = row.id;
+        
+        document.getElementById('editTelegramId').value = row.telegram_id;
+        document.getElementById('editUsername').value = row.username;
+        
+        // Split name safely (assuming basic split space for the UI form)
+        const nameParts = row.name !== "N/A" ? row.name.split(' ') : ["", ""];
+        document.getElementById('editFirstName').value = nameParts[0] || "";
+        document.getElementById('editLastName').value = nameParts.slice(1).join(' ') || "";
+        
+        document.getElementById('editBalance').value = parseFloat(row.balance);
+        editModal.show();
+    };
+
+    // Open Delete Modal
+    window.openDelete = function(id, telegramId) {
+        actionUserId = id;
+        document.getElementById('deleteTargetName').textContent = telegramId;
+        deleteModal.show();
+    };
+
+    // Helper for alerts
+    function showAlert(type, message) {
+        const icon = type === 'success' ? 'solar:check-circle-bold-duotone' : 'solar:danger-triangle-bold-duotone';
+        document.getElementById('alert-container').innerHTML = `
+            <div class="modern-alert ${type}" style="display:flex;">
+                <iconify-icon icon="${icon}" style="font-size: 1.5rem;"></iconify-icon>
+                <div>${message}</div>
+            </div>`;
+    }
+</script>
+{% endblock %}

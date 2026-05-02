@@ -1,0 +1,22 @@
+########### restart commands ########
+sudo systemctl daemon-reload
+sudo systemctl restart telegram_worker
+sudo systemctl restart gunicorn
+sudo systemctl restart nginx
+
+
+
+One line command to restart
+sudo systemctl restart telegram_worker gunicorn nginx
+
+
+
+######### viewing statuses ########
+sudo systemctl status telegram_worker
+sudo systemctl status gunicorn
+sudo systemctl status nginx
+
+
+
+########## viewing errors #########
+sudo journalctl -u telegram_worker -f

@@ -12,7 +12,7 @@ import string
 
 
 class TelegramUser(models.Model):
-    telegram_id = models.BigIntegerField(unique=True)  # User ID from Telegram
+    telegram_id = models.BigIntegerField(unique=True)
     username = models.CharField(max_length=150, blank=True, null=True)
     first_name = models.CharField(max_length=150, blank=True, null=True)
     last_name = models.CharField(max_length=150, blank=True, null=True)
@@ -190,6 +190,8 @@ class Wallet(models.Model):
 
     def __str__(self):
         return f"Wallet of {self.telegram_user}"
+    
+    
 
 class Order(models.Model):
     STATUS_CHOICES = [
@@ -210,13 +212,6 @@ class Order(models.Model):
 class VoucherCode(models.Model):
     code       = models.CharField(max_length=50, unique=True)
     product    = models.ForeignKey('Product', on_delete=models.CASCADE, related_name='vouchers')
-    supplier = models.ForeignKey(
-        Supplier, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True, 
-        related_name='vouchers' # Key for the inline
-    )
     is_used    = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -226,6 +221,7 @@ class VoucherCode(models.Model):
 
 class UploadVoucherCode(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255, null=True, blank=True)
 
     supplier = models.ForeignKey(
         Supplier,
@@ -254,18 +250,14 @@ class UploadVoucherCode(models.Model):
             valid_lines.append(code)
 
         for code in set(valid_lines):
-            VoucherCode.objects.get_or_create(
-                code=code, 
-                product=self.product,
-                defaults={'supplier': self.supplier} # <--- Save the supplier here
-            )
+            VoucherCode.objects.get_or_create(code=code, product=self.product)
 
         self.product.update_stock_from_vouchers()
     
 
 class OrderItem(models.Model):
     order        = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)
-    product      = models.ForeignKey('Product', on_delete=models.PROTECT)
+    product      = models.ForeignKey('Product', on_delete=models.CASCADE)
     quantity     = models.PositiveIntegerField()
     unit_price   = models.DecimalField(max_digits=10, decimal_places=3)
     pubg_id    = models.CharField(max_length=20, blank=True, null=True)
@@ -454,8 +446,12 @@ class AdminChatID(models.Model):
 
 class Announcement(models.Model):
     title = models.CharField(max_length=200, blank=True)
-    message = models.TextField()  # what admin writes
+    message = models.TextField()
     is_active = models.BooleanField(default=True)
+
+    # ✅ ADDED THESE TWO FIELDS FOR BROADCAST TRACKING
+    is_broadcasted = models.BooleanField(default=False)
+    broadcasted_at = models.DateTimeField(null=True, blank=True)
 
     show_from = models.DateTimeField(null=True, blank=True)
     show_until = models.DateTimeField(null=True, blank=True)

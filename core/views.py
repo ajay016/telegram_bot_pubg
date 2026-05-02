@@ -1,7 +1,315 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET, require_POST
+from django.db.models import Sum, Q
+import json
+from .models import *
+import logging
+
+
+
+
+
+
+
+
+
+
+logger = logging.getLogger(__name__)
+
+
 
 # Create your views here.
 def home(request):
     return redirect('/admin/')
 
+
+
+def dashboard(request):
+    return render(request, 'core/test.html')
+
+
+
+def upload_voucher_view(request):
+    if request.method == 'POST':
+        # 1. ADDED: Get the name from the form
+        name = request.POST.get('name') 
+        product_id = request.POST.get('product')
+        supplier_id = request.POST.get('supplier')
+        uploaded_file = request.FILES.get('file')
+
+        # 2. ADDED: Validation for required and unique name
+        if not name:
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'Upload Name is required.'
+            }, status=400)
+            
+        if UploadVoucherCode.objects.filter(name__iexact=name).exists():
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'An upload with this name already exists. Please choose a unique name.'
+            }, status=400)
+
+        # (Existing validation)
+        if not product_id or not uploaded_file:
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'Product and File are strictly required.'
+            }, status=400)
+        
+        if not uploaded_file.name.endswith('.txt'):
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'Invalid file format. Only .txt files are allowed.'
+            }, status=400)
+
+        try:
+            product = Product.objects.get(id=product_id)
+            supplier = Supplier.objects.filter(id=supplier_id).first() if supplier_id else None
+            
+            # 3. MODIFIED: Include name=name in the object creation
+            upload_obj = UploadVoucherCode(
+                name=name,  # <- ADDED THIS LINE
+                product=product,
+                supplier=supplier,
+                file=uploaded_file
+            )
+            upload_obj.clean() # Run custom model validations
+            upload_obj.save()
+            
+            # Trigger file processing
+            upload_obj.process_file()
+            
+            return JsonResponse({
+                'status': 'success', 
+                'message': f'Successfully uploaded and processed vouchers for {product.name}.'
+            })
+            
+        except Exception as e:
+            logger.error(f"Error processing voucher upload: {e}")
+            return JsonResponse({
+                'status': 'error', 
+                'message': f'An error occurred while processing the file: {str(e)}'
+            }, status=500)
+
+    # GET Request: Prepare data for the form dropdowns
+    context = {
+        'products': Product.objects.all(),
+        'suppliers': Supplier.objects.all(),
+    }
+    return render(request, 'core/vouchers/upload_voucher.html', context)
+
+
+def list_voucher_uploads_view(request):
+    # Optimize query by fetching related product and supplier in one go
+    uploads = UploadVoucherCode.objects.select_related('product', 'supplier').order_by('-uploaded_at')
+    context = {
+        'uploads': uploads
+    }
+    return render(request, 'core/vouchers/list_uploads.html', context)
+
+@require_POST
+def delete_voucher_upload_view(request, pk):
+    try:
+        upload = get_object_or_404(UploadVoucherCode, pk=pk)
+        name = upload.name or "Unnamed Upload"
+        upload.delete()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Successfully deleted upload: {name}'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting upload {pk}: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': 'An error occurred while deleting the record.'
+        }, status=500)
+
+# Dummy view for the detail page (to prevent URL errors until you build it)
+def voucher_upload_detail_view(request, pk):
+    upload = get_object_or_404(UploadVoucherCode, pk=pk)
+    
+    # 1. Read the file to get the codes associated with this upload
+    valid_codes = []
+    try:
+        if upload.file:
+            upload.file.seek(0)
+            lines = upload.file.read().decode('utf-8').splitlines()
+            valid_codes = [line.strip() for line in lines if line.strip()]
+    except Exception as e:
+        logger.error(f"Error reading file for upload {pk}: {e}")
+
+    # 2. Fetch the corresponding VoucherCode objects from the database
+    voucher_codes = VoucherCode.objects.filter(product=upload.product, code__in=valid_codes)
+    
+    context = {
+        'upload': upload,
+        'voucher_codes': voucher_codes,
+        'total_codes': voucher_codes.count(),
+    }
+    return render(request, 'core/vouchers/upload_detail.html', context)
+
+# Add this new view to handle code deletions
+@require_POST
+def delete_voucher_codes_view(request):
+    try:
+        data = json.loads(request.body)
+        code_ids = data.get('code_ids', [])
+        product_id = data.get('product_id')
+
+        if not code_ids:
+            return JsonResponse({'status': 'error', 'message': 'No codes selected.'}, status=400)
+
+        # Delete the specific voucher codes
+        deleted_count, _ = VoucherCode.objects.filter(id__in=code_ids).delete()
+
+        # Update the product stock since we removed vouchers
+        if product_id:
+            product = get_object_or_404(Product, id=product_id)
+            product.update_stock_from_vouchers()
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Successfully deleted {deleted_count} voucher code(s).'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting voucher codes: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': 'An error occurred while deleting the codes.'
+        }, status=500)
+        
+        
+        
+def customer_balances_view(request):
+    """Renders the base template for Customer Balances"""
+    return render(request, 'core/customers/balances.html')
+
+@require_GET
+def customer_balances_data(request):
+    """Handles Server-Side Processing for DataTables"""
+    draw = int(request.GET.get('draw', 1))
+    start = int(request.GET.get('start', 0))
+    length = int(request.GET.get('length', 10))
+    search_value = request.GET.get('search[value]', '')
+    
+    # Ordering
+    order_column_index = int(request.GET.get('order[0][column]', 0))
+    order_dir = request.GET.get('order[0][dir]', 'asc')
+    
+    # Map DataTable column indices to model fields
+    columns_map = {
+        0: 'telegram_id',
+        1: 'username',
+        2: 'first_name',
+        3: 'wallet__balance',
+        4: 'created_at',
+    }
+    order_field = columns_map.get(order_column_index, 'created_at')
+    if order_dir == 'desc':
+        order_field = f'-{order_field}'
+
+    # Base Queryset
+    queryset = TelegramUser.objects.select_related('wallet').all()
+
+    # Search Logic
+    if search_value:
+        queryset = queryset.filter(
+            Q(telegram_id__icontains=search_value) |
+            Q(username__icontains=search_value) |
+            Q(first_name__icontains=search_value) |
+            Q(last_name__icontains=search_value)
+        )
+
+    # Total records before/after filtering
+    total_records = TelegramUser.objects.count()
+    records_filtered = queryset.count()
+
+    # Apply ordering and pagination (Slicing)
+    queryset = queryset.order_by(order_field)[start:start+length]
+
+    # Format Data for DataTable
+    data = []
+    for user in queryset:
+        wallet_balance = user.wallet.balance if hasattr(user, 'wallet') else "0.000"
+        name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "N/A"
+        
+        data.append({
+            'id': user.id, # Hidden, used for actions
+            'telegram_id': user.telegram_id,
+            'username': f"@{user.username}" if user.username else "N/A",
+            'name': name,
+            'balance': str(wallet_balance),
+            'joined': user.created_at.strftime("%b %d, %Y"),
+        })
+
+    return JsonResponse({
+        'draw': draw,
+        'recordsTotal': total_records,
+        'recordsFiltered': records_filtered,
+        'data': data
+    })
+
+@require_GET
+def customer_summary_view(request, pk):
+    """Returns total deposits, spends, and available balance for a user"""
+    user = get_object_or_404(TelegramUser, pk=pk)
+    wallet_balance = user.wallet.balance if hasattr(user, 'wallet') else 0
+
+    # Calculate Total Deposits (Credit Transactions)
+    total_deposits = Transaction.objects.filter(
+        user=user, direction='credit', status='confirmed'
+    ).aggregate(total=Sum('amount'))['total'] or 0
+
+    # Calculate Total Spends (Debit Transactions)
+    total_spends = Transaction.objects.filter(
+        user=user, direction='debit', status='confirmed'
+    ).aggregate(total=Sum('amount'))['total'] or 0
+
+    return JsonResponse({
+        'balance': str(wallet_balance),
+        'total_deposits': str(total_deposits),
+        'total_spends': str(total_spends),
+        'username': f"@{user.username}" if user.username else str(user.telegram_id)
+    })
+
+@require_POST
+def edit_customer_view(request, pk):
+    """Updates user details and wallet balance manually"""
+    try:
+        user = get_object_or_404(TelegramUser, pk=pk)
+        data = json.loads(request.body)
+
+        # Update User Details
+        user.username = data.get('username', user.username)
+        user.first_name = data.get('first_name', user.first_name)
+        user.last_name = data.get('last_name', user.last_name)
+        user.save()
+
+        # Update or Create Wallet
+        wallet, created = Wallet.objects.get_or_create(telegram_user=user)
+        new_balance = data.get('balance')
+        if new_balance is not None:
+            wallet.balance = new_balance
+            wallet.save()
+
+            # Optional: You could create an 'adjustment' Transaction here to keep ledger intact
+            # Transaction.objects.create(user=user, transaction_type='adjustment', amount=..., status='confirmed')
+
+        return JsonResponse({'status': 'success', 'message': 'Customer updated successfully.'})
+    except Exception as e:
+        logger.error(f"Error updating customer {pk}: {e}")
+        return JsonResponse({'status': 'error', 'message': 'Failed to update customer.'}, status=500)
+
+@require_POST
+def delete_customer_view(request, pk):
+    """Deletes a customer"""
+    try:
+        user = get_object_or_404(TelegramUser, pk=pk)
+        user.delete() # Note: Wallet and Transactions are deleted via CASCADE
+        return JsonResponse({'status': 'success', 'message': 'Customer deleted successfully.'})
+    except Exception as e:
+        logger.error(f"Error deleting customer {pk}: {e}")
+        return JsonResponse({'status': 'error', 'message': 'Failed to delete customer.'}, status=500)
