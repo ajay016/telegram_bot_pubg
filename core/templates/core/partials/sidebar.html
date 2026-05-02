@@ -6,9 +6,9 @@
 
     <div class="sidebar-menu-scroll">
         
-        <a href="{% url 'dashboard' %}" class="sidebar-link active"> <iconify-icon icon="solar:widget-5-bold-duotone" class="menu-icon"></iconify-icon>
+        {% comment %} <a href="{% url 'dashboard' %}" class="sidebar-link active"> <iconify-icon icon="solar:widget-5-bold-duotone" class="menu-icon"></iconify-icon>
             Dashboard
-        </a>
+        </a> {% endcomment %}
 
         <!-- Customers -->
         <a href="{% url 'customer_balances' %}" class="sidebar-link {% if request.resolver_match.url_name == 'customer_balances' %}active{% endif %}">
@@ -18,10 +18,10 @@
         <!-- cusromers -->
 
 
-        <a href="#" class="sidebar-link">
+        {% comment %} <a href="#" class="sidebar-link">
             <iconify-icon icon="solar:user-bold-duotone" class="menu-icon"></iconify-icon>
             Users
-        </a>
+        </a> {% endcomment %}
 
         <!-- Vouvhers-->
         <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
@@ -40,7 +40,7 @@
         </div>
         <!-- Vouvhers-->
 
-        <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
+        {% comment %} <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
             <iconify-icon icon="solar:box-bold-duotone" class="menu-icon"></iconify-icon>
             Products
             <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
@@ -53,9 +53,9 @@
                     <li><a href="#">Categories</a></li>
                 </ul>
             </div>
-        </div>
+        </div> {% endcomment %}
 
-        <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
+        {% comment %} <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
             <iconify-icon icon="solar:settings-bold-duotone" class="menu-icon"></iconify-icon>
             Settings
             <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
@@ -68,7 +68,7 @@
                     <li><a href="#">Notifications</a></li>
                 </ul>
             </div>
-        </div>
+        </div> {% endcomment %}
 
     </div>
 </aside>
