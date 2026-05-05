@@ -136,6 +136,7 @@
         <table id="customersTable" class="table table-striped w-100">
             <thead>
                 <tr>
+                    <th>#</th>
                     <th>Telegram ID</th>
                     <th>Username</th>
                     <th>Name</th>
@@ -287,6 +288,15 @@
                 "type": "GET"
             },
             "columns": [
+                { 
+                    // Serial Number Column
+                    "data": null,
+                    "orderable": false,
+                    "searchable": false,
+                    "render": function (data, type, row, meta) {
+                            return meta.row + meta.settings._iDisplayStart + 1;
+                        }
+                },
                 { "data": "telegram_id" },
                 { "data": "username" },
                 { "data": "name" },

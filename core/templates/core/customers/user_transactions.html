@@ -157,6 +157,15 @@
                 "type": "GET"
             },
             "columns": [
+                    { 
+                        // Serial Number Column
+                        "data": null,
+                        "orderable": false,
+                        "searchable": false,
+                        "render": function (data, type, row, meta) {
+                            return meta.row + meta.settings._iDisplayStart + 1;
+                        }
+                },
                 { "data": "tx_id", "render": data => `<span class="text-muted" style="font-family: monospace;">${data}</span>` },
                 { "data": "type", "render": data => `<span class="fw-medium">${data}</span>` },
                 { "data": "direction", "render": function(data) {
