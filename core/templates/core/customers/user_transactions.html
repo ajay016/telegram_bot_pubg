@@ -1,0 +1,221 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Transactions: {{ customer.first_name }} - MyPanel{% endblock %}
+
+{% block custom_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'core/assets/css/datatable_style.css' %}">
+
+<style>
+
+    /* Modal List Styles */
+    .detail-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .detail-list li {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem 0;
+        border-bottom: 1px dashed rgba(255,255,255,0.1);
+    }
+
+    .detail-list li:last-child {
+        border-bottom: none;
+    }
+
+    .detail-label {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .detail-value {
+        color: var(--text-main);
+        font-weight: 500;
+        text-align: right;
+    }
+    /* Modal List Styles */
+
+    /* Badges */
+    .status-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 50rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .status-confirmed {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-pending {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    .status-failed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    /* Badges */
+
+    .dir-badge.credit {
+        color: #10b981;
+    }
+
+    .dir-badge.debit {
+        color: #ef4444;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-end flex-wrap gap-3">
+    <div>
+        <a href="{% url 'customer_balances' %}" class="text-decoration-none text-muted mb-2 d-inline-block hover-accent transition-all">
+            <iconify-icon icon="solar:arrow-left-bold-duotone" class="align-middle"></iconify-icon> Back to Customers
+        </a>
+        <h2>Transactions for {{ customer.first_name|default:customer.telegram_id }}</h2>
+        <p class="text-muted mb-0">Viewing full ledger history for ID: {{ customer.telegram_id }}</p>
+    </div>
+</div>
+
+<div class="card bg-dark border-secondary p-4" style="border-radius: 1rem; background: var(--bg-panel) !important; border: var(--panel-border) !important; box-shadow: var(--panel-glow);">
+    <div class="table-responsive">
+        <table id="transactionsTable" class="table table-striped w-100">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>TX ID</th>
+                    <th>Type</th>
+                    <th>Direction</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="txDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <iconify-icon icon="solar:document-text-bold-duotone" style="font-size: 1.5rem; color: var(--accent);"></iconify-icon>
+                    Transaction Details
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <ul class="detail-list" id="txDetailList">
+                    <li class="text-center py-3"><span class="text-muted">Loading details...</span></li>
+                </ul>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <button type="button" class="btn btn-secondary" style="background: var(--bg-body); border-color: rgba(255,255,255,0.1);" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block custom_js %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    let dataTable;
+    let txDetailModal;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        txDetailModal = new bootstrap.Modal(document.getElementById('txDetailModal'));
+
+        // Initialize Server-Side DataTable
+        dataTable = $('#transactionsTable').DataTable({
+            "processing": true,
+            "serverSide": true,
+            "ajax": {
+                "url": "{% url 'user_transactions_data' customer.id %}",
+                "type": "GET"
+            },
+            "columns": [
+                { "data": "tx_id", "render": data => `<span class="text-muted" style="font-family: monospace;">${data}</span>` },
+                { "data": "type", "render": data => `<span class="fw-medium">${data}</span>` },
+                { "data": "direction", "render": function(data) {
+                    const icon = data === 'Credit' ? 'solar:arrow-right-down-bold-duotone' : 'solar:arrow-right-up-bold-duotone';
+                    const colorClass = data === 'Credit' ? 'credit' : 'debit';
+                    const sign = data === 'Credit' ? '+' : '-';
+                    return `<span class="dir-badge ${colorClass} d-flex align-items-center gap-1"><iconify-icon icon="${icon}"></iconify-icon> ${sign} ${data}</span>`;
+                }},
+                { "data": "amount", "render": data => `<span class="fw-bold text-light">$${data}</span>` },
+                { "data": "status", "render": function(data) {
+                    const statusClass = `status-${data.toLowerCase()}`;
+                    return `<span class="status-badge ${statusClass}">${data}</span>`;
+                }},
+                { "data": "date" },
+                { 
+                    "data": null,
+                    "orderable": false,
+                    "searchable": false,
+                    "className": "text-end",
+                    "render": function (data, type, row) {
+                        return `
+                            <button onclick="openTxDetails(${row.id})" class="action-btn view-btn" title="View Details">
+                                <iconify-icon icon="solar:eye-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                        `;
+                    }
+                }
+            ],
+            "order": [[ 5, "desc" ]], // Order by date descending initially
+        });
+    });
+
+    window.openTxDetails = function(txId) {
+        txDetailModal.show();
+        const list = document.getElementById('txDetailList');
+        list.innerHTML = `<li class="text-center py-3"><span class="text-muted">Loading details...</span></li>`;
+
+        fetch(`/transactions/${txId}/details/`)
+            .then(res => res.json())
+            .then(data => {
+                const statusClass = `status-${data.status.toLowerCase()}`;
+                const dirColor = data.direction === 'Credit' ? '#10b981' : '#ef4444';
+                const dirSign = data.direction === 'Credit' ? '+' : '-';
+
+                list.innerHTML = `
+                    <li><span class="detail-label">Transaction ID</span> <span class="detail-value" style="font-family: monospace;">${data.tx_id}</span></li>
+                    <li><span class="detail-label">Date & Time</span> <span class="detail-value">${data.date}</span></li>
+                    <li><span class="detail-label">Type</span> <span class="detail-value">${data.type}</span></li>
+                    <li><span class="detail-label">Amount</span> <span class="detail-value" style="color: ${dirColor}; font-weight: bold; font-size: 1.1rem;">${dirSign} $${data.amount}</span></li>
+                    <li><span class="detail-label">Direction</span> <span class="detail-value">${data.direction}</span></li>
+                    <li><span class="detail-label">Status</span> <span class="detail-value"><span class="status-badge ${statusClass}">${data.status}</span></span></li>
+                    <li><span class="detail-label">Payment Method</span> <span class="detail-value">${data.payment_method}</span></li>
+                    <li><span class="detail-label">Order Reference</span> <span class="detail-value">${data.order_id !== "N/A" ? '#' + data.order_id : 'N/A'}</span></li>
+                    <li><span class="detail-label">Note / Memo</span> <span class="detail-value text-muted">${data.note}</span></li>
+                `;
+            })
+            .catch(err => {
+                list.innerHTML = `<li class="text-center py-3 text-danger">Failed to load details.</li>`;
+            });
+    };
+</script>
+{% endblock %}

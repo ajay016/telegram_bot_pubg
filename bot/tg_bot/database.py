@@ -3,6 +3,7 @@ from django.utils.crypto import get_random_string
 from django.db import transaction
 from asgiref.sync import sync_to_async
 from decimal import Decimal, ROUND_DOWN
+from django.db.models import Sum
 from core.models import *
 from core.decorators import block_check
 
@@ -375,3 +376,21 @@ def get_payment_method_info(method_id):
         }
     except PaymentMethod.DoesNotExist:
         return None
+    
+    
+    
+@sync_to_async
+def get_top_buyers(limit=5):
+    top_users = Transaction.objects.filter(
+        transaction_type='purchase',
+        status='confirmed',
+        direction='debit'
+    ).values(
+        'user__first_name',
+        'user__username',
+        'user__telegram_id'
+    ).annotate(
+        total_spent=Sum('amount')
+    ).order_by('-total_spent')[:limit]
+
+    return list(top_users)

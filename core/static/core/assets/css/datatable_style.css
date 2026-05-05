@@ -1,0 +1,101 @@
+/* DataTables Base Styling */
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        background-color: var(--bg-body);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-main);
+        border-radius: 0.5rem;
+        padding: 0.4rem 0.75rem;
+    }
+
+    table.dataTable.table-striped > tbody > tr:nth-of-type(odd) > * {
+        background-color: rgba(255, 255, 255, 0.02);
+        color: var(--text-main);
+    }
+
+    table.dataTable.table-striped > tbody > tr:nth-of-type(even) > * {
+        background-color: transparent;
+        color: var(--text-main);
+    }
+
+    table.dataTable > thead > tr > th {
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+    }
+
+    table.dataTable > tbody > tr > td {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        vertical-align: middle;
+    }
+
+    .page-item.active .page-link {
+        background-color: var(--accent);
+        border-color: var(--accent);
+    }
+
+    .page-link {
+        background-color: var(--bg-panel-solid);
+        border-color: rgba(59, 130, 246, 0.2);
+        color: var(--text-main);
+    }
+
+    /* Buttons */
+    .action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 35px;
+        height: 35px;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+    }
+
+    .action-btn.view-btn {
+        background: rgba(59, 130, 246, 0.1);
+        color: var(--accent);
+    }
+
+    .action-btn.view-btn:hover {
+        background: var(--accent);
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    .action-btn.edit-btn {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+    }
+
+    .action-btn.edit-btn:hover {
+        background: #10b981;
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    .action-btn.delete-btn {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+    }
+
+    .action-btn.delete-btn:hover {
+        background: #ef4444;
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    .action-btn.transactions-btn {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+    }
+
+    .action-btn.transactions-btn:hover {
+        background: #f59e0b;
+        color: #fff;
+        transform: translateY(-2px);
+    }

@@ -313,3 +313,89 @@ def delete_customer_view(request, pk):
     except Exception as e:
         logger.error(f"Error deleting customer {pk}: {e}")
         return JsonResponse({'status': 'error', 'message': 'Failed to delete customer.'}, status=500)
+    
+    
+@require_GET
+def user_transactions_view(request, pk):
+    """Renders the page to view a specific user's transactions"""
+    user = get_object_or_404(TelegramUser, pk=pk)
+    
+    context ={
+        'customer': user
+    }
+    return render(request, 'core/customers/user_transactions.html', context)
+
+@require_GET
+def user_transactions_data(request, pk):
+    """Handles Server-Side Processing for the Transactions DataTable"""
+    user = get_object_or_404(TelegramUser, pk=pk)
+    
+    draw = int(request.GET.get('draw', 1))
+    start = int(request.GET.get('start', 0))
+    length = int(request.GET.get('length', 10))
+    search_value = request.GET.get('search[value]', '')
+    
+    order_column_index = int(request.GET.get('order[0][column]', 5)) # Default to created_at
+    order_dir = request.GET.get('order[0][dir]', 'desc')
+    
+    columns_map = {
+        0: 'tx_id',
+        1: 'transaction_type',
+        2: 'direction',
+        3: 'amount',
+        4: 'status',
+        5: 'created_at',
+    }
+    order_field = columns_map.get(order_column_index, 'created_at')
+    if order_dir == 'desc':
+        order_field = f'-{order_field}'
+
+    queryset = Transaction.objects.filter(user=user)
+
+    if search_value:
+        queryset = queryset.filter(
+            Q(tx_id__icontains=search_value) |
+            Q(transaction_type__icontains=search_value) |
+            Q(status__icontains=search_value) |
+            Q(note__icontains=search_value)
+        )
+
+    total_records = Transaction.objects.filter(user=user).count()
+    records_filtered = queryset.count()
+
+    queryset = queryset.order_by(order_field)[start:start+length]
+
+    data = []
+    for tx in queryset:
+        data.append({
+            'id': tx.id,
+            'tx_id': tx.tx_id or "N/A",
+            'type': tx.get_transaction_type_display(),
+            'direction': tx.get_direction_display(),
+            'amount': str(tx.amount),
+            'status': tx.get_status_display(),
+            'date': tx.created_at.strftime("%b %d, %Y %H:%M"),
+        })
+
+    return JsonResponse({
+        'draw': draw,
+        'recordsTotal': total_records,
+        'recordsFiltered': records_filtered,
+        'data': data
+    })
+
+@require_GET
+def transaction_details_view(request, tx_id):
+    """Returns detailed JSON data for a specific transaction modal"""
+    tx = get_object_or_404(Transaction, pk=tx_id)
+    return JsonResponse({
+        'tx_id': tx.tx_id or "N/A",
+        'type': tx.get_transaction_type_display(),
+        'direction': tx.get_direction_display(),
+        'amount': str(tx.amount),
+        'status': tx.get_status_display(),
+        'note': tx.note or "None",
+        'payment_method': tx.payment_method.name if tx.payment_method else "N/A",
+        'order_id': tx.order.id if tx.order else "N/A",
+        'date': tx.created_at.strftime("%b %d, %Y %H:%M:%S")
+    })

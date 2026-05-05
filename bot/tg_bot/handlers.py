@@ -41,6 +41,7 @@ from .utils import(
 from .database import(
     get_or_create_telegram_user,
     get_current_announcement,
+    get_top_buyers,
     get_categories,
     get_wallet_by_telegram_id,
     get_all_payment_methods,
@@ -68,6 +69,41 @@ from .database import(
 
 
 
+# @block_check
+# async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+#     await get_or_create_telegram_user(update.effective_user)
+
+#     keyboard = [
+#         [
+#             InlineKeyboardButton("🛒 Browse Products", callback_data="browse_products"),
+#             InlineKeyboardButton("💳 My Wallet", callback_data="my_wallet")
+#         ],
+#         [
+#             InlineKeyboardButton("📦 My Orders", callback_data="my_orders"),
+#             InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard")
+#         ],
+#         [
+#             InlineKeyboardButton("🎮 Game ID Recharge (Auto)", callback_data="game_id_recharge_auto")
+#         ],
+#         [
+#             InlineKeyboardButton("📞 Contact Support", callback_data="contact_support"),
+#             InlineKeyboardButton("🧩 API", callback_data="api")
+#         ]
+#     ]
+
+#     # ✅ Inline keyboard markup (correct for InlineKeyboardButton)
+#     reply_markup = InlineKeyboardMarkup(keyboard)
+
+#     # 2) Send welcome text as a second bubble with the menu keyboard
+#     await update.message.reply_text(
+#         "🏬 Welcome to MSNGamer Bot!\n\n"
+#         "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
+#         "🔘 Choose an option below to get started:",
+#         reply_markup=reply_markup
+#     )
+
+
+
 @block_check
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await get_or_create_telegram_user(update.effective_user)
@@ -90,16 +126,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     ]
 
-    # ✅ Inline keyboard markup (correct for InlineKeyboardButton)
+    # ✅ Inline keyboard markup
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # 2) Send welcome text as a second bubble with the menu keyboard
-    await update.message.reply_text(
+    
+    welcome_text = (
         "🏬 Welcome to MSNGamer Bot!\n\n"
         "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
-        "🔘 Choose an option below to get started:",
-        reply_markup=reply_markup
+        "🔘 Choose an option below to get started:"
     )
+
+    # ✅ Check if this was triggered by a button click or a normal command
+    if update.callback_query:
+        # Edit the existing message for a smooth "back" transition
+        await update.callback_query.edit_message_text(
+            text=welcome_text,
+            reply_markup=reply_markup
+        )
+    else:
+        # Send a new message if the user typed /start
+        await update.message.reply_text(
+            text=welcome_text,
+            reply_markup=reply_markup
+        )
     
     
     
@@ -260,6 +308,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         print('SELECT_QUANTITY: ', SELECT_QUANTITY)
         return SELECT_QUANTITY
+    
+    elif data == "leaderboard":
+        top_buyers = await get_top_buyers()
+        if not top_buyers:
+            text_response = "🏆 <b>Leaderboard</b>\n\nNo purchases have been made yet."
+        else:
+            text_response = "🏆 <b>Top 5 Buyers Leaderboard</b>\n\n"
+            medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
+            for idx, buyer in enumerate(top_buyers):
+                name = buyer['user__first_name'] or buyer['user__username'] or str(buyer['user__telegram_id'])
+                spent = buyer['total_spent']
+                # The numbering is right here: {idx + 1}.
+                text_response += f"{idx + 1}. {medals[idx]} <b>{name}</b> - <code>${spent:.2f}</code>\n"
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="main_menu")]]
+        await query.edit_message_text(text_response, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return ConversationHandler.END
+
+    elif data == "my_orders":
+        tg_user = await get_or_create_telegram_user(update.effective_user)
+        pdf_buffer = await sync_to_async(generate_order_summary_pdf)(tg_user)
+        
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="main_menu")]]
+
+        if not pdf_buffer:
+            await query.edit_message_text("📭 You have no orders currently.\n\nStart shopping now! 🛍️", reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await query.edit_message_text("📄 Preparing your order summary...", reply_markup=InlineKeyboardMarkup(keyboard))
+            await context.bot.send_document(
+                chat_id=update.effective_chat.id,
+                document=pdf_buffer,
+                filename=f"order_summary_{tg_user.telegram_id}.pdf",
+                caption="📄 Here is your order summary!"
+            )
+        return ConversationHandler.END
 
     elif data == "main_menu":
         # ✅ prevent old pending purchase from being completed later
@@ -422,7 +505,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif "My Wallet" in text:
         # Fetch wallet and user data
         wallet = await get_wallet_by_telegram_id(telegram_id)
-        print('wallet info: ', wallet)
+        # We removed the print(wallet) statement here to prevent the async ORM crash
         if not wallet:
             await update.message.reply_text("❌ Wallet not found.")
             return
@@ -496,8 +579,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     elif "Leaderboard" in text:
-        await update.message.reply_text("Here's the leaderboard.")
-        
+        top_buyers = await get_top_buyers()
+
+        if not top_buyers:
+            text_response = "🏆 <b>Leaderboard</b>\n\nNo purchases have been made yet."
+        else:
+            text_response = "🏆 <b>Top 5 Buyers Leaderboard</b>\n\n"
+            medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
+            for idx, buyer in enumerate(top_buyers):
+                name = buyer['user__first_name'] or buyer['user__username'] or str(buyer['user__telegram_id'])
+                spent = buyer['total_spent']
+                # The numbering is right here: {idx + 1}.
+                text_response += f"{idx + 1}. {medals[idx]} <b>{name}</b> - <code>${spent:.2f}</code>\n"
+
+        await update.message.reply_text(text_response, parse_mode="HTML")
         return True
 
     # elif "Game ID Recharge (Auto)" in text:

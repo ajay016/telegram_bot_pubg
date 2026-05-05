@@ -21,4 +21,9 @@ urlpatterns = [
     path('customers/<int:pk>/summary/', views.customer_summary_view, name='customer_summary'),
     path('customers/<int:pk>/edit/', views.edit_customer_view, name='edit_customer'),
     path('customers/<int:pk>/delete/', views.delete_customer_view, name='delete_customer'),
+    
+    # Transaction details
+    path('customers/<int:pk>/transactions/', views.user_transactions_view, name='user_transactions'),
+    path('customers/<int:pk>/transactions/data/', views.user_transactions_data, name='user_transactions_data'),
+    path('transactions/<int:tx_id>/details/', views.transaction_details_view, name='transaction_details'),
 ]
