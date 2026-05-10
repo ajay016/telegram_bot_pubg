@@ -115,7 +115,6 @@ def list_voucher_uploads_view(request):
     return render(request, 'core/vouchers/list_uploads.html', context)
 
 
-@staff_member_required(login_url='admin:login')
 @require_POST
 def delete_voucher_upload_view(request, pk):
     try:
@@ -160,7 +159,6 @@ def voucher_upload_detail_view(request, pk):
     return render(request, 'core/vouchers/upload_detail.html', context)
 
 
-@staff_member_required(login_url='admin:login')
 @require_POST
 def delete_voucher_codes_view(request):
     try:
@@ -198,7 +196,6 @@ def customer_balances_view(request):
     return render(request, 'core/customers/balances.html')
 
 
-@staff_member_required(login_url='admin:login')
 @require_GET
 def customer_balances_data(request):
     """Handles Server-Side Processing for DataTables"""
@@ -265,7 +262,6 @@ def customer_balances_data(request):
     })
 
 
-@staff_member_required(login_url='admin:login')
 @require_GET
 def customer_summary_view(request, pk):
     """Returns total deposits, spends, and available balance for a user"""
@@ -291,7 +287,6 @@ def customer_summary_view(request, pk):
 
 
 
-@staff_member_required(login_url='admin:login')
 @require_POST
 def edit_customer_view(request, pk):
     """Updates user details and wallet balance manually"""
@@ -322,7 +317,6 @@ def edit_customer_view(request, pk):
 
 
 
-@staff_member_required(login_url='admin:login')
 @require_POST
 def delete_customer_view(request, pk):
     """Deletes a customer"""
@@ -349,7 +343,6 @@ def user_transactions_view(request, pk):
 
 
 
-@staff_member_required(login_url='admin:login')
 @require_GET
 def user_transactions_data(request, pk):
     """Handles Server-Side Processing for the Transactions DataTable"""
@@ -411,7 +404,6 @@ def user_transactions_data(request, pk):
 
 
 
-@staff_member_required(login_url='admin:login')
 @require_GET
 def transaction_details_view(request, tx_id):
     """Returns detailed JSON data for a specific transaction modal"""
@@ -436,7 +428,6 @@ def admin_pending_orders_view(request):
 
 
 
-@staff_member_required(login_url='admin:login')
 def admin_pending_orders_data(request):
     # DataTables Server-Side Processing
     draw = int(request.GET.get('draw', 1))
@@ -483,7 +474,6 @@ def admin_pending_orders_data(request):
 
 
 
-@staff_member_required(login_url='admin:login')
 def order_details_api(request, order_id):
     order = get_object_or_404(Order, id=order_id)
     items = order.items.all()
@@ -508,7 +498,6 @@ def order_details_api(request, order_id):
     
 
 
-@staff_member_required(login_url='admin:login')
 def send_telegram_notification(chat_id, text, uploaded_file=None):
     """Helper to send telegram message synchronously from Django View"""
     token = settings.TELEGRAM_BOT_TOKEN
@@ -537,7 +526,7 @@ def send_telegram_notification(chat_id, text, uploaded_file=None):
             
             
 
-@staff_member_required(login_url='admin:login')
+
 def approve_order_api(request, order_id):
     if request.method == "POST":
         order = get_object_or_404(Order, id=order_id)
@@ -574,7 +563,7 @@ def approve_order_api(request, order_id):
 
 
 
-@staff_member_required(login_url='admin:login')
+
 def reject_order_api(request, order_id):
     if request.method == "POST":
         data = json.loads(request.body)
@@ -594,7 +583,7 @@ def reject_order_api(request, order_id):
 
 
 
-@staff_member_required(login_url='admin:login')
+
 def delete_order_api(request, order_id):
     if request.method == "POST":
         order = get_object_or_404(Order, id=order_id)
