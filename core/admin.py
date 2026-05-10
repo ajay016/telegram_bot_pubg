@@ -77,7 +77,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
-    list_display = ('id', 'user', 'pubg_id', 'total_price', 'status', 'created_at')
+    list_display = ('id', 'user', 'pubg_id', 'total_price', 'status', 'order_type', 'created_at')
     list_filter = ('status', 'created_at')
     search_fields = ('user__telegram_id', 'user__username', 'items__voucher_code__code')
     date_hierarchy = 'created_at'

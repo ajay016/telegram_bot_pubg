@@ -200,9 +200,14 @@ class Order(models.Model):
         ('Completed', 'Completed'),
         ('Rejected',  'Rejected'),
     ]
+    ORDER_TYPE = [
+        ('Manual',   'Manual'),
+        ('Payment Gateway', 'Payment Gateway'),
+    ]
     user        = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
     total_price = models.DecimalField(max_digits=12, decimal_places=3)
     status      = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    order_type  = models.CharField(max_length=20, choices=ORDER_TYPE, default='Payment Gateway')
     admin_response_text = models.TextField(blank=True, null=True, help_text="Message sent to user upon approval")
     delivery_file = models.FileField(upload_to='deliveries/', blank=True, null=True, help_text="File sent to user")
     rejection_reason = models.TextField(blank=True, null=True, help_text="Reason for rejection")
