@@ -556,7 +556,7 @@ def approve_order_api(request, order_id):
             order.save()
 
         # Send to Telegram
-        telegram_text = f"✅ <b>Order #{order.id} Approved!</b>\n\n{message}"
+        telegram_text = f"✅ <b>Order #{order.id} Approved!</b>\n\n{message}\n\n💰 <b>Remaining Balance:</b> ${wallet.balance}"
         send_telegram_notification(order.user.telegram_id, telegram_text, uploaded_file)
 
         return JsonResponse({"status": "success", "message": "Order approved & balance deducted."})
