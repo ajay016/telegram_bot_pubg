@@ -5,23 +5,17 @@
     </div>
 
     <div class="sidebar-menu-scroll">
+        <a href="{% url 'admin:index' %}" class="sidebar-link">
+            <iconify-icon icon="solar:settings-bold-duotone" class="menu-icon"></iconify-icon>
+            Django Admin
+        </a>
         
-        {% comment %} <a href="{% url 'dashboard' %}" class="sidebar-link active"> <iconify-icon icon="solar:widget-5-bold-duotone" class="menu-icon"></iconify-icon>
-            Dashboard
-        </a> {% endcomment %}
-
         <!-- Customers -->
         <a href="{% url 'customer_balances' %}" class="sidebar-link {% if request.resolver_match.url_name == 'customer_balances' %}active{% endif %}">
             <iconify-icon icon="solar:users-group-two-rounded-bold-duotone" class="menu-icon"></iconify-icon>
             Customers
         </a>
         <!-- cusromers -->
-
-
-        {% comment %} <a href="#" class="sidebar-link">
-            <iconify-icon icon="solar:user-bold-duotone" class="menu-icon"></iconify-icon>
-            Users
-        </a> {% endcomment %}
 
         <!-- Vouvhers-->
         <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
@@ -40,35 +34,11 @@
         </div>
         <!-- Vouvhers-->
 
-        {% comment %} <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
-            <iconify-icon icon="solar:box-bold-duotone" class="menu-icon"></iconify-icon>
-            Products
-            <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
+        <!-- Admin Orders -->
+        <a href="{% url 'admin_pending_orders' %}" class="sidebar-link {% if request.resolver_match.url_name == 'customer_balances' %}active{% endif %}">
+            <iconify-icon icon="solar:users-group-two-rounded-bold-duotone" class="menu-icon"></iconify-icon>
+            Admin Orders
         </a>
-        <div class="sidebar-submenu-wrapper">
-            <div class="sidebar-submenu-inner">
-                <ul class="sidebar-submenu">
-                    <li><a href="#">All Products</a></li>
-                    <li><a href="#">Add Product</a></li>
-                    <li><a href="#">Categories</a></li>
-                </ul>
-            </div>
-        </div> {% endcomment %}
-
-        {% comment %} <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
-            <iconify-icon icon="solar:settings-bold-duotone" class="menu-icon"></iconify-icon>
-            Settings
-            <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
-        </a>
-        <div class="sidebar-submenu-wrapper">
-            <div class="sidebar-submenu-inner">
-                <ul class="sidebar-submenu">
-                    <li><a href="#">General</a></li>
-                    <li><a href="#">Security</a></li>
-                    <li><a href="#">Notifications</a></li>
-                </ul>
-            </div>
-        </div> {% endcomment %}
-
+        <!-- Admin Orders -->
     </div>
 </aside>

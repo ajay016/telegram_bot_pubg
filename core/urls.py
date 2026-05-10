@@ -26,4 +26,12 @@ urlpatterns = [
     path('customers/<int:pk>/transactions/', views.user_transactions_view, name='user_transactions'),
     path('customers/<int:pk>/transactions/data/', views.user_transactions_data, name='user_transactions_data'),
     path('transactions/<int:tx_id>/details/', views.transaction_details_view, name='transaction_details'),
+    
+    #Admin Orders
+    path('admin-orders/', views.admin_pending_orders_view, name='admin_pending_orders'),
+    path('admin-orders/data/', views.admin_pending_orders_data, name='admin_pending_orders_data'),
+    path('admin-orders/<int:order_id>/details/', views.order_details_api, name='order_details_api'),
+    path('admin-orders/<int:order_id>/approve/', views.approve_order_api, name='approve_order_api'),
+    path('admin-orders/<int:order_id>/reject/', views.reject_order_api, name='reject_order_api'),
+    path('admin-orders/<int:order_id>/delete/', views.delete_order_api, name='delete_order_api'),
 ]

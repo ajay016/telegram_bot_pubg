@@ -1,6 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
+from django.db import transaction
+from django.core.paginator import Paginator
+from django.contrib.admin.views.decorators import staff_member_required
+import requests
 from django.db.models import Sum, Q
 import json
 from .models import *
@@ -24,12 +28,12 @@ def home(request):
     return redirect('/admin/')
 
 
-
+@staff_member_required(login_url='admin:login')
 def dashboard(request):
     return render(request, 'core/test.html')
 
 
-
+@staff_member_required(login_url='admin:login')
 def upload_voucher_view(request):
     if request.method == 'POST':
         # 1. ADDED: Get the name from the form
@@ -101,6 +105,7 @@ def upload_voucher_view(request):
     return render(request, 'core/vouchers/upload_voucher.html', context)
 
 
+@staff_member_required(login_url='admin:login')
 def list_voucher_uploads_view(request):
     # Optimize query by fetching related product and supplier in one go
     uploads = UploadVoucherCode.objects.select_related('product', 'supplier').order_by('-uploaded_at')
@@ -109,6 +114,8 @@ def list_voucher_uploads_view(request):
     }
     return render(request, 'core/vouchers/list_uploads.html', context)
 
+
+@staff_member_required(login_url='admin:login')
 @require_POST
 def delete_voucher_upload_view(request, pk):
     try:
@@ -127,7 +134,8 @@ def delete_voucher_upload_view(request, pk):
             'message': 'An error occurred while deleting the record.'
         }, status=500)
 
-# Dummy view for the detail page (to prevent URL errors until you build it)
+
+@staff_member_required(login_url='admin:login')
 def voucher_upload_detail_view(request, pk):
     upload = get_object_or_404(UploadVoucherCode, pk=pk)
     
@@ -151,7 +159,8 @@ def voucher_upload_detail_view(request, pk):
     }
     return render(request, 'core/vouchers/upload_detail.html', context)
 
-# Add this new view to handle code deletions
+
+@staff_member_required(login_url='admin:login')
 @require_POST
 def delete_voucher_codes_view(request):
     try:
@@ -182,11 +191,14 @@ def delete_voucher_codes_view(request):
         }, status=500)
         
         
-        
+
+@staff_member_required(login_url='admin:login')
 def customer_balances_view(request):
     """Renders the base template for Customer Balances"""
     return render(request, 'core/customers/balances.html')
 
+
+@staff_member_required(login_url='admin:login')
 @require_GET
 def customer_balances_data(request):
     """Handles Server-Side Processing for DataTables"""
@@ -252,6 +264,8 @@ def customer_balances_data(request):
         'data': data
     })
 
+
+@staff_member_required(login_url='admin:login')
 @require_GET
 def customer_summary_view(request, pk):
     """Returns total deposits, spends, and available balance for a user"""
@@ -275,6 +289,9 @@ def customer_summary_view(request, pk):
         'username': f"@{user.username}" if user.username else str(user.telegram_id)
     })
 
+
+
+@staff_member_required(login_url='admin:login')
 @require_POST
 def edit_customer_view(request, pk):
     """Updates user details and wallet balance manually"""
@@ -303,6 +320,9 @@ def edit_customer_view(request, pk):
         logger.error(f"Error updating customer {pk}: {e}")
         return JsonResponse({'status': 'error', 'message': 'Failed to update customer.'}, status=500)
 
+
+
+@staff_member_required(login_url='admin:login')
 @require_POST
 def delete_customer_view(request, pk):
     """Deletes a customer"""
@@ -314,7 +334,9 @@ def delete_customer_view(request, pk):
         logger.error(f"Error deleting customer {pk}: {e}")
         return JsonResponse({'status': 'error', 'message': 'Failed to delete customer.'}, status=500)
     
-    
+
+
+@staff_member_required(login_url='admin:login')
 @require_GET
 def user_transactions_view(request, pk):
     """Renders the page to view a specific user's transactions"""
@@ -325,6 +347,9 @@ def user_transactions_view(request, pk):
     }
     return render(request, 'core/customers/user_transactions.html', context)
 
+
+
+@staff_member_required(login_url='admin:login')
 @require_GET
 def user_transactions_data(request, pk):
     """Handles Server-Side Processing for the Transactions DataTable"""
@@ -384,6 +409,9 @@ def user_transactions_data(request, pk):
         'data': data
     })
 
+
+
+@staff_member_required(login_url='admin:login')
 @require_GET
 def transaction_details_view(request, tx_id):
     """Returns detailed JSON data for a specific transaction modal"""
@@ -399,3 +427,176 @@ def transaction_details_view(request, tx_id):
         'order_id': tx.order.id if tx.order else "N/A",
         'date': tx.created_at.strftime("%b %d, %Y %H:%M:%S")
     })
+    
+
+
+@staff_member_required(login_url='admin:login')
+def admin_pending_orders_view(request):
+    return render(request, 'core/admin_orders/admin_pending_orders.html')
+
+
+
+@staff_member_required(login_url='admin:login')
+def admin_pending_orders_data(request):
+    # DataTables Server-Side Processing
+    draw = int(request.GET.get('draw', 1))
+    start = int(request.GET.get('start', 0))
+    length = int(request.GET.get('length', 10))
+    search_value = request.GET.get('search[value]', '')
+
+    orders = Order.objects.filter(status="Admin Pending").select_related('user').order_by('-created_at')
+
+    if search_value:
+        orders = orders.filter(
+            Q(id__icontains=search_value) | 
+            Q(user__telegram_id__icontains=search_value) |
+            Q(user__username__icontains=search_value)
+        )
+
+    paginator = Paginator(orders, length)
+    page_number = (start // length) + 1
+    page_obj = paginator.get_page(page_number)
+
+    data = []
+    for order in page_obj:
+        # Assuming you want to show the first product name in the table
+        first_item = order.items.first()
+        product_name = first_item.product.name if first_item else "Unknown"
+        qty = first_item.quantity if first_item else 0
+
+        data.append({
+            "id": order.id,
+            "telegram_id": order.user.telegram_id,
+            "username": order.user.username or "N/A",
+            "product_name": product_name,
+            "quantity": qty,
+            "total_price": str(order.total_price),
+            "date": order.created_at.strftime("%Y-%m-%d %H:%M"),
+        })
+
+    return JsonResponse({
+        "draw": draw,
+        "recordsTotal": orders.count(),
+        "recordsFiltered": paginator.count,
+        "data": data
+    })
+
+
+
+@staff_member_required(login_url='admin:login')
+def order_details_api(request, order_id):
+    order = get_object_or_404(Order, id=order_id)
+    items = order.items.all()
+    
+    items_data = [{
+        "product_name": item.product.name,
+        "quantity": item.quantity,
+        "unit_price": str(item.unit_price),
+        "total": str(item.quantity * item.unit_price)
+    } for item in items]
+
+    return JsonResponse({
+        "order_id": order.id,
+        "customer": order.user.telegram_id,
+        "customer_username": order.user.username or "N/A",
+        "status": order.status,
+        "created_at": order.created_at.strftime("%b %d, %Y, %I:%M %p"),
+        "total": str(order.total_price),
+        "current_balance": str(order.user.wallet.balance), # ADD THIS LINE
+        "items": items_data
+    })
+    
+
+
+@staff_member_required(login_url='admin:login')
+def send_telegram_notification(chat_id, text, uploaded_file=None):
+    """Helper to send telegram message synchronously from Django View"""
+    token = settings.TELEGRAM_BOT_TOKEN
+    
+    if uploaded_file:
+        url = f"https://api.telegram.org/bot{token}/sendDocument"
+        # Reset file pointer to the beginning after Django saved it!
+        uploaded_file.seek(0) 
+        files = {'document': (uploaded_file.name, uploaded_file.read())}
+        data = {'chat_id': chat_id, 'caption': text, 'parse_mode': 'HTML'}
+        try:
+            response = requests.post(url, data=data, files=files)
+            if response.status_code != 200:
+                print(f"Telegram API Error (Document): {response.text}")
+        except Exception as e:
+            print(f"Telegram API Exception: {e}")
+    else:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = {'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}
+        try:
+            response = requests.post(url, data=data)
+            if response.status_code != 200:
+                print(f"Telegram API Error (Message): {response.text}")
+        except Exception as e:
+            print(f"Telegram API Exception: {e}")
+            
+            
+
+@staff_member_required(login_url='admin:login')
+def approve_order_api(request, order_id):
+    if request.method == "POST":
+        order = get_object_or_404(Order, id=order_id)
+        
+        if order.status != "Admin Pending":
+            return JsonResponse({"status": "error", "message": "Order is not pending."})
+
+        message = request.POST.get('message', 'Here is your requested order!')
+        uploaded_file = request.FILES.get('file')
+
+        with transaction.atomic():
+            wallet = order.user.wallet  # Assuming OneToOne or ForeignKey relation
+            
+            # Final balance check before deducting
+            if wallet.balance < order.total_price:
+                return JsonResponse({"status": "error", "message": "Customer has insufficient balance. Cannot approve."})
+
+            # Deduct balance
+            wallet.balance -= order.total_price
+            wallet.save()
+
+            # Update Order
+            order.status = "Completed"
+            order.admin_response_text = message
+            if uploaded_file:
+                order.delivery_file = uploaded_file
+            order.save()
+
+        # Send to Telegram
+        telegram_text = f"✅ <b>Order #{order.id} Approved!</b>\n\n{message}"
+        send_telegram_notification(order.user.telegram_id, telegram_text, uploaded_file)
+
+        return JsonResponse({"status": "success", "message": "Order approved & balance deducted."})
+
+
+
+@staff_member_required(login_url='admin:login')
+def reject_order_api(request, order_id):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        order = get_object_or_404(Order, id=order_id)
+        
+        reason = data.get('reason', 'No reason provided.')
+
+        order.status = "Rejected"
+        order.rejection_reason = reason
+        order.save()
+
+        # Notify User
+        telegram_text = f"❌ <b>Order #{order.id} Rejected</b>\n\n<b>Reason:</b> {reason}\n<i>Your balance was not deducted.</i>"
+        send_telegram_notification(order.user.telegram_id, telegram_text)
+
+        return JsonResponse({"status": "success", "message": "Order rejected successfully."})
+
+
+
+@staff_member_required(login_url='admin:login')
+def delete_order_api(request, order_id):
+    if request.method == "POST":
+        order = get_object_or_404(Order, id=order_id)
+        order.delete()
+        return JsonResponse({"status": "success", "message": "Order deleted permanently."})

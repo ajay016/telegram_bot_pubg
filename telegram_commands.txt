@@ -1,6 +1,6 @@
 ########### restart commands ########
 sudo systemctl daemon-reload
-sudo systemctl restart telegram_worker
+sudo systemctl restart telegrambot
 sudo systemctl restart gunicorn
 sudo systemctl restart nginx
 
@@ -20,3 +20,8 @@ sudo systemctl status nginx
 
 ########## viewing errors #########
 sudo journalctl -u telegram_worker -f
+
+
+
+
+sudo systemctl restart telegrambot

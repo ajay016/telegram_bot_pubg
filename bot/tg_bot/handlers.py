@@ -29,10 +29,13 @@ from .states import(
     SELECTING_PAYMENT_METHOD,
     AMOUNT_INPUT,
     CONFIRM_PURCHASE,
-    CONFIRM_RECHARGE_PURCHASE
+    CONFIRM_RECHARGE_PURCHASE,
+    SELECT_MANUAL_QUANTITY,
+    CONFIRM_MANUAL_PURCHASE,
 )
 from .utils import(
     fmt_money,
+    get_admin_chat_id,
     delete_message_after_delay,
     normalize_amount,
     notify_admin_order_completed,
@@ -118,7 +121,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard")
         ],
         [
-            InlineKeyboardButton("🎮 Game ID Recharge (Auto)", callback_data="game_id_recharge_auto")
+            InlineKeyboardButton("🎮 Game ID Recharge (Auto)", callback_data="game_id_recharge_auto"),
+            InlineKeyboardButton("📝 Manual Order", callback_data="manual_order")
         ],
         [
             InlineKeyboardButton("📞 Contact Support", callback_data="contact_support"),
@@ -217,6 +221,74 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
         await query.edit_message_text("🎮 Select a recharge category:", reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    # ==========================================
+    # 🆕 MANUAL ORDER FLOW (Add inside button_handler)
+    # ==========================================
+    elif data == "manual_order":
+        categories = await get_categories()
+        keyboard = [
+            [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
+            for cat in categories
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
+        await query.edit_message_text("📂 <b>Select a category for your manual order:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return
+
+    elif data.startswith("m_cat_"):
+        category_id = int(data.split("_")[2])
+        products = await get_products_by_category(category_id)
+        if not products:
+            await query.edit_message_text("No products found in this category.")
+            return
+        
+        keyboard = [
+            [InlineKeyboardButton(f"{prod['name']} | ${fmt_money(prod['price'])} | Stock: {prod['stock_quantity']}", callback_data=f"m_prod_{prod['id']}")]
+            for prod in products
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="manual_order")])
+        await query.edit_message_text("🛍️ <b>Select a product to place a manual order:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return
+
+    elif data.startswith("m_prod_"):
+        product_id = int(data.split("_")[2])
+        product = await get_product_detail(product_id)
+        if not product:
+            await query.edit_message_text("Product not found.")
+            return
+
+        price = Decimal(product['price']).normalize()
+        
+        text = (
+            f"🏷️ <b>{product['name']}</b>\n\n"
+            f"📝 <b>Description:</b> {product['description']}\n"
+            f"💰 <b>Price:</b> ${price}\n"
+            f"📦 <b>Stock:</b> {product['stock_quantity']} available\n\n"
+            f"⚠️ <i>Note: This is a manual order. Delivery requires admin processing.</i>"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("🛒 Place Manual Order", callback_data=f"m_buy_{product_id}")],
+            [InlineKeyboardButton("🔙 Back", callback_data=f"m_cat_{product['category']}")]
+        ]
+        await query.edit_message_text(text=text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return
+
+    elif data.startswith("m_buy_"):
+        product_id = int(data.split("_")[2])
+        context.user_data["pending_manual_product_id"] = product_id
+        
+        user_data = update.effective_user
+        telegram_user = await get_or_create_telegram_user(user_data)
+        product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+        await query.edit_message_text(
+            f"📝 You are placing a <b>Manual Order</b> for <b>{product.name}</b>\n\n"
+            f"🔢 Enter a quantity between <b>1</b> and <b>{product.stock_quantity}</b>\n\n"
+            f"🚫 <i>Send /cancel to abort.</i>",
+            parse_mode="HTML"
+        )
+        return SELECT_MANUAL_QUANTITY
 
     elif data.startswith("cat_"):
         print('data category: ', data)
@@ -501,6 +573,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_recharge_categories(update, context)
         
         return True
+    
+    elif "Manual Order" in text:
+        categories = await get_categories()
+        keyboard = [
+            [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
+            for cat in categories
+        ]
+        keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="main_menu")])
+        await update.message.reply_text("📂 <b>Select a category for your manual order:</b>", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        
+        return True
 
     elif "My Wallet" in text:
         # Fetch wallet and user data
@@ -613,6 +696,159 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("API access is coming soon!")
         
         return True
+    
+    
+
+@block_check
+async def handle_manual_quantity_input(update, context):
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END
+    
+    text = update.message.text.strip()
+    user_data = update.effective_user
+    telegram_user = await get_or_create_telegram_user(user_data)
+    product_id = context.user_data.get("pending_manual_product_id")
+
+    if not product_id:
+        await update.message.reply_text("⚠️ No product selected. Please start again.")
+        return ConversationHandler.END
+
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    try:
+        qty = int(text)
+        if qty <= 0:
+            raise ValueError("Quantity must be positive")
+        if qty > product.stock_quantity:
+            await update.message.reply_text(
+                f"🚫 Only <b>{product.stock_quantity}</b> units of <b>{product.name}</b> are in stock.\n"
+                f"Please start again.", parse_mode="HTML"
+            )
+            return ConversationHandler.END
+    except ValueError:
+        await update.message.reply_text("🚫 Please enter a valid positive number.")
+        return SELECT_MANUAL_QUANTITY
+
+    total = product.price * Decimal(qty)
+
+    # Check balance exactly like standard orders
+    if wallet.balance < total:
+        await update.message.reply_text(
+            f"❌ You need ${normalize_amount(total)} but your balance is only ${normalize_amount(wallet.balance)}."
+        )
+        return ConversationHandler.END
+
+    context.user_data["pending_manual_qty"] = qty
+    context.user_data["pending_manual_total"] = total
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes, Place Order", callback_data="confirm_manual_yes"),
+            InlineKeyboardButton("❌ No, Cancel", callback_data="confirm_manual_no"),
+        ]
+    ]
+    
+    await update.message.reply_text(
+        f"📝 <b>Confirm your MANUAL order</b>\n\n"
+        f"🛍️ <b>Product:</b> {product.name}\n"
+        f"🔢 <b>Quantity:</b> {qty}\n"
+        f"💵 <b>Total Price:</b> ${normalize_amount(total)}\n\n"
+        f"⚠️ <i>Your balance (${normalize_amount(wallet.balance)}) is sufficient. It will be deducted once the admin processes your order.</i>",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
+    )
+    return CONFIRM_MANUAL_PURCHASE
+
+
+@block_check
+async def handle_manual_purchase_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "confirm_manual_no":
+        context.user_data.clear()
+        await query.edit_message_text("❌ Manual order cancelled.")
+        return ConversationHandler.END
+
+    if query.data != "confirm_manual_yes":
+        return ConversationHandler.END
+
+    user_data = update.effective_user
+    telegram_user = await get_or_create_telegram_user(user_data)
+    
+    product_id = context.user_data.get("pending_manual_product_id")
+    qty = context.user_data.get("pending_manual_qty")
+    total = context.user_data.get("pending_manual_total")
+
+    if not all([product_id, qty, total]):
+        await query.edit_message_text("❌ Session expired. Please start again.")
+        return ConversationHandler.END
+
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    # Final sanity check before saving order
+    if wallet.balance < total or product.stock_quantity < qty:
+        await query.edit_message_text("⚠️ Order failed due to insufficient balance or stock changes.")
+        return ConversationHandler.END
+
+    # Save to database (NO balance deduction)
+    @sync_to_async
+    def create_pending_manual_order():
+        with transaction.atomic():
+            order = Order.objects.create(
+                user=telegram_user,
+                total_price=total,
+                status="Admin Pending" # ✅ Using our new status
+            )
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=qty,
+                unit_price=product.price
+            )
+            return order
+
+    order = await create_pending_manual_order()
+
+    # Inform Customer
+    await query.edit_message_text(
+        f"✅ <b>Manual Order Placed Successfully!</b>\n\n"
+        f"🔖 <b>Order ID:</b> <code>{order.id}</code>\n"
+        f"🛍️ <b>Product:</b> {product.name}\n"
+        f"⏳ <b>Status:</b> Pending Admin Processing\n\n"
+        f"Thank you! We will process this shortly.",
+        parse_mode="HTML"
+    )
+
+    # Inform Admin (Beautiful Modern Layout)
+    # ✅ USING YOUR utils.py FUNCTION
+    admin_chat_id = await get_admin_chat_id() 
+    
+    admin_text = (
+        f"🚨 <b>NEW MANUAL ORDER ALERT</b> 🚨\n\n"
+        f"👤 <b>Customer ID:</b> <code>{telegram_user.telegram_id}</code>\n"
+        f"🔖 <b>Order ID:</b> <code>{order.id}</code>\n"
+        f"📌 <b>Status:</b> 🟡 Admin Pending\n\n"
+        f"🛍️ <b>Product Info:</b>\n"
+        f"├ 📦 Name: <b>{product.name}</b>\n"
+        f"├ 🔢 Quantity: <b>{qty}</b>\n"
+        f"└ 💵 Total Cost: <b>${normalize_amount(total)}</b>\n\n"
+        f"💳 <b>Customer Wallet:</b>\n"
+        f"└ Current Balance: <b>${normalize_amount(wallet.balance)}</b> (Sufficient ✅)\n\n"
+        f"⚙️ <i>Action Required: Please process this order in the Django Admin Panel. The balance has NOT been deducted yet.</i>"
+    )
+
+    if admin_chat_id:
+        try:
+            await context.bot.send_message(chat_id=admin_chat_id, text=admin_text, parse_mode="HTML")
+        except Exception as e:
+            print(f"Failed to notify admin (ID: {admin_chat_id}): {e}")
+    else:
+        print(f"Warning: Admin chat ID is not configured in the database. Order {order.id} notification not sent.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
     
     
     

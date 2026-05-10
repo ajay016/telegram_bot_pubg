@@ -196,12 +196,16 @@ class Wallet(models.Model):
 class Order(models.Model):
     STATUS_CHOICES = [
         ('Pending',   'Pending'),
+        ('Admin Pending', 'Admin Pending'),
         ('Completed', 'Completed'),
         ('Rejected',  'Rejected'),
     ]
     user        = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
     total_price = models.DecimalField(max_digits=12, decimal_places=3)
-    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default='Pending')
+    status      = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    admin_response_text = models.TextField(blank=True, null=True, help_text="Message sent to user upon approval")
+    delivery_file = models.FileField(upload_to='deliveries/', blank=True, null=True, help_text="File sent to user")
+    rejection_reason = models.TextField(blank=True, null=True, help_text="Reason for rejection")
     created_at  = models.DateTimeField(auto_now_add=True)
     pubg_id    = models.CharField(max_length=20, blank=True, null=True)
 

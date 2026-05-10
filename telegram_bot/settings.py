@@ -14,6 +14,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import environ
 from pathlib import Path
 from decouple import config
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
 from django.templatetags.static import static
 # from django.templatetags.static import static
 # from django.urls import reverse_lazy
@@ -229,9 +231,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 
+# UNFOLD = {
+#     "STYLES": [
+#         # keep your existing ones here if you already have any
+#         lambda request: static("css/admin_overrides.css"),
+#     ],
+# }
+
 UNFOLD = {
     "STYLES": [
         # keep your existing ones here if you already have any
         lambda request: static("css/admin_overrides.css"),
+    ],
+    # --- ADD THIS INSTEAD OF SIDEBAR ---
+    "SITE_DROPDOWN": [
+        {
+            "icon": "dashboard",
+            "title": _("Custom Admin Panel"),
+            "link": reverse_lazy("customer_balances"), 
+        },
     ],
 }

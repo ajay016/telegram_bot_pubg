@@ -1,0 +1,617 @@
+{% extends 'core/base.html' %}
+{% load static %}
+
+{% block title %}Pending Orders - MyPanel{% endblock %}
+
+{% block custom_css %}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'core/assets/css/datatable_style.css' %}">
+
+<style>
+    /* Modern Form Inputs for Modals */
+    .modern-input {
+        background-color: rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-main);
+        border-radius: 0.5rem;
+        padding: 0.6rem 1rem;
+        width: 100%;
+        transition: all 0.3s ease;
+    }
+
+    .modern-input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+    }
+
+    .modern-input:disabled {
+        background-color: rgba(255, 255, 255, 0.05);
+        color: var(--text-muted);
+        cursor: not-allowed;
+    }
+
+    /* Action Buttons (Assuming these match your existing theme) */
+    .action-btn {
+        background: transparent;
+        border: none;
+        padding: 5px;
+        border-radius: 5px;
+        transition: all 0.2s ease;
+    }
+    .action-btn:hover { background: rgba(255,255,255,0.1); }
+    .view-btn { color: #3b82f6; }
+    .approve-btn { color: #10b981; }
+    .reject-btn { color: #f59e0b; }
+    .delete-btn { color: #ef4444; }
+
+    .modern-btn-cancel {
+        background: var(--bg-body);
+        color: var(--text-muted);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .modern-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .modern-btn-danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: #fff;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px -3px rgba(239, 68, 68, 0.4);
+    }
+
+    .modern-btn-danger:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -3px rgba(239, 68, 68, 0.6);
+    }
+
+    .modern-btn-primary {
+        background: linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%);
+        color: #fff;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px -3px rgba(59, 130, 246, 0.4);
+    }
+
+    .modern-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -3px rgba(59, 130, 246, 0.6);
+    }
+    
+    .modern-btn-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: #fff;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px -3px rgba(16, 185, 129, 0.4);
+    }
+
+    .modern-btn-success:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -3px rgba(16, 185, 129, 0.6);
+    }
+
+    .modern-btn-warning {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: #fff;
+        border: none;
+        padding: 0.6rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px -3px rgba(245, 158, 11, 0.4);
+    }
+
+    .modern-btn-warning:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px -3px rgba(245, 158, 11, 0.6);
+    }
+
+    /* Modern Order Details View */
+    .order-detail-card {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .order-detail-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.6rem;
+        border-bottom: 1px dashed rgba(255,255,255,0.1);
+        padding-bottom: 0.6rem;
+    }
+    .order-detail-row:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .item-card {
+        background: rgba(59, 130, 246, 0.05);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2>Pending Manual Orders</h2>
+    <p class="text-muted">Review, approve (with file delivery), or reject pending customer requests.</p>
+</div>
+
+<div id="alert-container"></div>
+
+<div class="card bg-dark border-secondary p-4" style="border-radius: 1rem; background: var(--bg-panel) !important; border: var(--panel-border) !important; box-shadow: var(--panel-glow);">
+    <div class="table-responsive">
+        <table id="ordersTable" class="table table-striped w-100">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Order ID</th>
+                    <th>Customer TG</th>
+                    <th>Product</th>
+                    <th>Qty</th>
+                    <th>Total ($)</th>
+                    <th>Date</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="viewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <iconify-icon icon="solar:document-text-bold-duotone" style="font-size: 1.5rem; color: var(--accent);"></iconify-icon>
+                    Order Details: <span id="viewOrderId" class="text-light"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                <div id="orderDetailsContent">Loading...</div>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(59, 130, 246, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(16, 185, 129, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2 text-success">
+                    <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    Approve Order
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                <div id="approveOrderSummary" class="mb-3">Loading details...</div>
+                
+                <form id="approveForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase">Message to User</label>
+                        <textarea id="approveMessage" class="modern-input" rows="3">Here is your requested order! Thank you for purchasing.</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase">Attach File (Optional)</label>
+                        <input type="file" id="approveFile" class="modern-input" style="padding: 0.4rem;">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(16, 185, 129, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="proceedApproveBtn" class="modern-btn-success">Proceed</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(245, 158, 11, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2 text-warning">
+                    <iconify-icon icon="solar:close-circle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    Reject Order
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                <form id="rejectForm">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small text-uppercase">Reason for Rejection</label>
+                        <textarea id="rejectReason" class="modern-input" rows="3" placeholder="E.g., Out of stock, invalid request..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(245, 158, 11, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmRejectBtn" class="modern-btn-warning">Confirm Rejection</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-header border-bottom" style="border-color: rgba(239, 68, 68, 0.1) !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2 text-danger">
+                    <iconify-icon icon="solar:danger-triangle-bold-duotone" style="font-size: 1.5rem;"></iconify-icon>
+                    Delete Order
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-light">
+                Are you sure you want to permanently delete Order <strong id="deleteTargetId" class="text-white"></strong>?
+                <br><br>
+                <small class="text-muted">This action cannot be undone.</small>
+            </div>
+            <div class="modal-footer border-top" style="border-color: rgba(239, 68, 68, 0.1) !important;">
+                <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="confirmDeleteBtn" class="modern-btn-danger">Delete Permanently</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade" id="finalConfirmApproveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="background: var(--bg-panel); border: var(--panel-border); box-shadow: var(--panel-glow); border-radius: 1rem;">
+            <div class="modal-body text-center p-4 text-light">
+                <iconify-icon icon="solar:shield-warning-bold-duotone" class="text-success mb-3" style="font-size: 4rem;"></iconify-icon>
+                <h5 class="mb-3">Confirm Approval?</h5>
+                <p class="text-muted small mb-4">Are you sure you want to approve this order? The user's balance will be deducted immediately.</p>
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="button" class="modern-btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="finalSubmitApproveBtn" class="modern-btn-success">Yes, Approve & Deduct</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% csrf_token %}
+{% endblock %}
+
+{% block custom_js %}
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    let dataTable;
+    let viewModal, approveModal, finalConfirmApproveModal, rejectModal, deleteModal;
+    let actionOrderId = null;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize Modals
+        viewModal = new bootstrap.Modal(document.getElementById('viewModal'));
+        approveModal = new bootstrap.Modal(document.getElementById('approveModal'));
+        finalConfirmApproveModal = new bootstrap.Modal(document.getElementById('finalConfirmApproveModal'));
+        rejectModal = new bootstrap.Modal(document.getElementById('rejectModal'));
+        deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+        // Initialize DataTable
+        dataTable = $('#ordersTable').DataTable({
+            "processing": true,
+            "serverSide": true,
+            "ajax": {
+                "url": "{% url 'admin_pending_orders_data' %}",
+                "type": "GET"
+            },
+            "columns": [
+                { 
+                    "data": null, "orderable": false, "searchable": false,
+                    "render": function (data, type, row, meta) {
+                        return meta.row + meta.settings._iDisplayStart + 1;
+                    }
+                },
+                { "data": "id", "render": data => `<strong>#${data}</strong>` },
+                { "data": "telegram_id" },
+                { "data": "product_name" },
+                { "data": "quantity" },
+                { "data": "total_price", "render": data => `<span class="fw-bold" style="color: var(--accent);">$${data}</span>` },
+                { "data": "date" },
+                { 
+                    "data": null,
+                    "orderable": false,
+                    "searchable": false,
+                    "className": "text-end",
+                    "render": function (data, type, row) {
+                        return `
+                            <button onclick="openView(${row.id})" class="action-btn view-btn me-1" title="View Details">
+                                <iconify-icon icon="solar:eye-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                            <button onclick="openApprove(${row.id})" class="action-btn approve-btn me-1" title="Approve Order">
+                                <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                            <button onclick="openReject(${row.id})" class="action-btn reject-btn me-1" title="Reject Order">
+                                <iconify-icon icon="solar:close-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                            <button onclick="openDelete(${row.id})" class="action-btn delete-btn" title="Delete Order">
+                                <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                            </button>
+                        `;
+                    }
+                }
+            ],
+            "order": [[ 6, "desc" ]], // Order by date desc
+            "language": {
+                "search": "_INPUT_",
+                "searchPlaceholder": "Search TG ID..."
+            }
+        });
+
+        // Handle Approve
+        // Step 1: Proceed button in Approve Modal (opens confirm modal)
+        document.getElementById('proceedApproveBtn').addEventListener('click', function() {
+            approveModal.hide();
+            finalConfirmApproveModal.show();
+        });
+
+        // Step 2: Final submit in the Confirmation Modal
+        document.getElementById('finalSubmitApproveBtn').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Sending...';
+            btn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('message', document.getElementById('approveMessage').value);
+            const fileInput = document.getElementById('approveFile');
+            if (fileInput.files.length > 0) {
+                formData.append('file', fileInput.files[0]);
+            }
+
+            fetch(`/admin-orders/${actionOrderId}/approve/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    dataTable.ajax.reload(null, false);
+                    finalConfirmApproveModal.hide();
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message);
+                }
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+        });
+
+        // Handle Reject
+        document.getElementById('confirmRejectBtn').addEventListener('click', function() {
+            if(!confirm("Are you sure you want to reject this order?")) return;
+
+            const btn = this;
+            btn.innerHTML = 'Rejecting...';
+            btn.disabled = true;
+
+            const payload = { reason: document.getElementById('rejectReason').value };
+
+            fetch(`/admin-orders/${actionOrderId}/reject/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    dataTable.ajax.reload(null, false);
+                    rejectModal.hide();
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message);
+                }
+            })
+            .finally(() => {
+                btn.innerHTML = 'Confirm Rejection';
+                btn.disabled = false;
+            });
+        });
+
+        // Handle Delete
+        document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+            const btn = this;
+            btn.innerHTML = 'Deleting...';
+            btn.disabled = true;
+
+            fetch(`/admin-orders/${actionOrderId}/delete/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    dataTable.ajax.reload(null, false);
+                    deleteModal.hide();
+                    showAlert('success', data.message);
+                } else {
+                    showAlert('error', data.message);
+                }
+            })
+            .finally(() => {
+                btn.innerHTML = 'Delete Permanently';
+                btn.disabled = false;
+            });
+        });
+    });
+
+    // Modal Triggers
+    window.openView = function(id) {
+        document.getElementById('viewOrderId').textContent = `#${id}`;
+        // Show loading spinner
+        document.getElementById('orderDetailsContent').innerHTML = `
+            <div class="d-flex justify-content-center my-4">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>`;
+        
+        fetch(`/admin-orders/${id}/details/`)
+            .then(res => res.json())
+            .then(data => {
+                let itemsHtml = data.items.map(item => `
+                    <div class="item-card d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1 text-white d-flex align-items-center gap-2">
+                                <iconify-icon icon="solar:box-bold-duotone" class="text-primary"></iconify-icon>
+                                ${item.product_name}
+                            </h6>
+                            <small class="text-muted">${item.quantity}x @ $${item.unit_price}</small>
+                        </div>
+                        <div class="fw-bold text-success">$${item.total}</div>
+                    </div>
+                `).join('');
+
+                let html = `
+                    <div class="order-detail-card">
+                        <h6 class="text-uppercase text-muted small mb-3 fw-bold" style="letter-spacing: 1px;">Customer Information</h6>
+                        <div class="order-detail-row">
+                            <span class="text-muted">Telegram ID</span>
+                            <span class="text-white fw-bold">${data.customer}</span>
+                        </div>
+                        <div class="order-detail-row">
+                            <span class="text-muted">Username</span>
+                            <span class="text-white">@${data.customer_username}</span>
+                        </div>
+                    </div>
+
+                    <div class="order-detail-card">
+                        <h6 class="text-uppercase text-muted small mb-3 fw-bold" style="letter-spacing: 1px;">Order Information</h6>
+                        <div class="order-detail-row">
+                            <span class="text-muted">Date & Time</span>
+                            <span class="text-white">${data.created_at}</span>
+                        </div>
+                        <div class="order-detail-row">
+                            <span class="text-muted">Current Status</span>
+                            <span class="badge bg-warning text-dark d-flex align-items-center gap-1" style="font-size: 0.85rem;">
+                                <iconify-icon icon="solar:clock-circle-bold"></iconify-icon> ${data.status}
+                            </span>
+                        </div>
+                    </div>
+
+                    <h6 class="text-uppercase text-muted small mb-3 mt-4 fw-bold" style="letter-spacing: 1px;">Purchased Items</h6>
+                    ${itemsHtml}
+
+                    <div class="d-flex justify-content-between align-items-center mt-4 p-3" style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem;">
+                        <span class="text-uppercase text-success fw-bold" style="letter-spacing: 1px;">Total Amount</span>
+                        <h4 class="text-success mb-0 fw-bold">$${data.total}</h4>
+                    </div>
+                `;
+                document.getElementById('orderDetailsContent').innerHTML = html;
+                viewModal.show();
+            });
+    };
+
+    window.openApprove = function(id) {
+        actionOrderId = id;
+        document.getElementById('approveFile').value = '';
+        document.getElementById('approveMessage').value = 'Here is your requested order! Thank you for purchasing.';
+        
+        // Show loading spinner in summary
+        document.getElementById('approveOrderSummary').innerHTML = `
+            <div class="d-flex justify-content-center my-3">
+                <div class="spinner-border text-success spinner-border-sm" role="status"></div>
+            </div>`;
+            
+        // Fetch details to calculate balance
+        fetch(`/admin-orders/${id}/details/`)
+            .then(res => res.json())
+            .then(data => {
+                const currentBalance = parseFloat(data.current_balance);
+                const orderTotal = parseFloat(data.total);
+                const remainingBalance = currentBalance - orderTotal;
+                
+                // Construct UI using existing modern card styles
+                let summaryHtml = `
+                    <div class="order-detail-card p-3" style="background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2);">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted small text-uppercase">Current Balance</span>
+                            <span class="text-white fw-bold">$${currentBalance.toFixed(2)}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted small text-uppercase">Order Total</span>
+                            <span class="text-danger fw-bold">-$${orderTotal.toFixed(2)}</span>
+                        </div>
+                        <hr class="my-2" style="border-color: rgba(255,255,255,0.1);">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-success small fw-bold text-uppercase">Balance After Approval</span>
+                            <h5 class="mb-0 ${remainingBalance < 0 ? 'text-danger' : 'text-success'} fw-bold">$${remainingBalance.toFixed(2)}</h5>
+                        </div>
+                        ${remainingBalance < 0 ? `<div class="text-danger small mt-2"><iconify-icon icon="solar:danger-triangle-bold-duotone"></iconify-icon> Warning: User does not have enough balance.</div>` : ''}
+                    </div>
+                `;
+                document.getElementById('approveOrderSummary').innerHTML = summaryHtml;
+            });
+            
+        approveModal.show();
+    };
+
+    window.openReject = function(id) {
+        actionOrderId = id;
+        document.getElementById('rejectReason').value = '';
+        rejectModal.show();
+    };
+
+    window.openDelete = function(id) {
+        actionOrderId = id;
+        document.getElementById('deleteTargetId').textContent = id;
+        deleteModal.show();
+    };
+
+    function showAlert(type, message) {
+        const icon = type === 'success' ? 'solar:check-circle-bold-duotone' : 'solar:danger-triangle-bold-duotone';
+        document.getElementById('alert-container').innerHTML = `
+            <div class="modern-alert ${type}" style="display:flex;">
+                <iconify-icon icon="${icon}" style="font-size: 1.5rem;"></iconify-icon>
+                <div>${message}</div>
+            </div>`;
+    }
+</script>
+{% endblock %}

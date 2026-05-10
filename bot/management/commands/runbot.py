@@ -16,7 +16,7 @@ django.setup()
 # 2. Import your modules AFTER Django is setup
 from bot.tg_bot.states import *
 from bot.tg_bot.handlers import (
-    start, button_handler, handle_text, handle_amount_input,
+    handle_manual_purchase_confirmation, handle_manual_quantity_input, start, button_handler, handle_text, handle_amount_input,
     handle_quantity_input, handle_purchase_confirmation,
     handle_recharge_quantity_input, confirm_recharge_purchase_callback, cancel
 )
@@ -54,6 +54,12 @@ conv_handler = ConversationHandler(
         ],
         CONFIRM_RECHARGE_PURCHASE: [
             CallbackQueryHandler(confirm_recharge_purchase_callback)
+        ],
+        SELECT_MANUAL_QUANTITY: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_manual_quantity_input)
+        ],
+        CONFIRM_MANUAL_PURCHASE: [
+            CallbackQueryHandler(handle_manual_purchase_confirmation)
         ],
     },
     fallbacks=[
