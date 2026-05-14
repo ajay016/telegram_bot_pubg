@@ -67,6 +67,13 @@ def get_categories():
 
 
 @sync_to_async
+def get_categories_pubg():
+    # Filters categories to only show active ones that have 'pubg' in the slug
+    return list(Category.objects.filter(is_active=True, slug__icontains="pubg").values("id", "name"))
+
+
+
+@sync_to_async
 def get_recharge_categories():
     return list(RechargeCategory.objects.all().values("id", "name"))
 

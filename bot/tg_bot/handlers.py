@@ -53,6 +53,7 @@ from .database import(
     get_wallet_by_telegram_id,
     get_all_payment_methods,
     get_products_by_category,
+    get_categories_pubg,
     get_product_detail,
     get_product_and_wallet,
     get_payment_method_info,
@@ -235,7 +236,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🆕 MANUAL ORDER FLOW (Add inside button_handler)
     # ==========================================
     elif data == "manual_order":
-        categories = await get_categories()
+        categories = await get_categories_pubg()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
             for cat in categories
@@ -607,7 +608,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return True
     
     elif "Manual Order" in text:
-        categories = await get_categories()
+        categories = await get_categories_pubg()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
             for cat in categories
