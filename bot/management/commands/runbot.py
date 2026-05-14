@@ -20,7 +20,7 @@ from bot.tg_bot.handlers import (
     handle_manual_purchase_confirmation, handle_manual_quantity_input, start, button_handler, handle_text, handle_amount_input,
     handle_quantity_input, handle_purchase_confirmation,
     handle_recharge_quantity_input, confirm_recharge_purchase_callback, cancel,
-    handle_bep20_amount_input, handle_bep20_amount_confirm, confirm_bep20_callback, bep20_cancel_callback,
+    handle_bep20_amount_input, handle_bep20_amount_confirm, confirm_bep20_callback, bep20_cancel_callback, handle_manual_pubg_id_input
 )
 
 BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
@@ -68,6 +68,9 @@ conv_handler = ConversationHandler(
         ],
         BEP20_AMOUNT_CONFIRM: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bep20_amount_confirm)
+        ],
+        TYPING_MANUAL_PUBG_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_manual_pubg_id_input)
         ],
     },
     fallbacks=[

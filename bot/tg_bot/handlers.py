@@ -34,6 +34,7 @@ from .states import(
     CONFIRM_MANUAL_PURCHASE,
     BEP20_AMOUNT_INPUT,
     BEP20_AMOUNT_CONFIRM,
+    TYPING_MANUAL_PUBG_ID,
 )
 from .utils import(
     fmt_money,
@@ -290,13 +291,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         telegram_user = await get_or_create_telegram_user(user_data)
         product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
-        await query.edit_message_text(
-            f"📝 You are placing a <b>Manual Order</b> for <b>{product.name}</b>\n\n"
-            f"🔢 Enter a quantity between <b>1</b> and <b>{product.stock_quantity}</b>\n\n"
-            f"🚫 <i>Send /cancel to abort.</i>",
-            parse_mode="HTML"
-        )
-        return SELECT_MANUAL_QUANTITY
+        # Fetch category slug safely
+        @sync_to_async
+        def get_cat_slug(p):
+            return p.category.slug
+        
+        cat_slug = await get_cat_slug(product)
+
+        # NEW FLOW: Check if category slug contains 'pubg'
+        if "pubg" in cat_slug.lower():
+            await query.edit_message_text(
+                f"📝 You are placing a <b>Manual Order</b> for <b>{product.name}</b>\n\n"
+                f"🎮 <b>Please enter your PUBG Game ID:</b>\n\n"
+                f"🚫 <i>Send /cancel to abort.</i>",
+                parse_mode="HTML"
+            )
+            return TYPING_MANUAL_PUBG_ID
+        else:
+            await query.edit_message_text(
+                f"📝 You are placing a <b>Manual Order</b> for <b>{product.name}</b>\n\n"
+                f"🔢 Enter a quantity between <b>1</b> and <b>{product.stock_quantity}</b>\n\n"
+                f"🚫 <i>Send /cancel to abort.</i>",
+                parse_mode="HTML"
+            )
+            return SELECT_MANUAL_QUANTITY
 
     elif data.startswith("cat_"):
         print('data category: ', data)
@@ -713,6 +731,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     
 
+# ======================= Manual Order Flow =============================
+@block_check
+async def handle_manual_pubg_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END
+    
+    pubg_id_text = update.message.text.strip()
+    context.user_data["manual_pubg_id"] = pubg_id_text
+
+    product_id = context.user_data.get("pending_manual_product_id")
+    user_data = update.effective_user
+    telegram_user = await get_or_create_telegram_user(user_data)
+    product, wallet = await get_product_and_wallet(telegram_user, product_id)
+
+    await update.message.reply_text(
+        f"✅ Game ID saved: <b>{pubg_id_text}</b>\n\n"
+        f"🔢 Now, enter a quantity between <b>1</b> and <b>{product.stock_quantity}</b>\n\n"
+        f"🚫 <i>Send /cancel to abort.</i>",
+        parse_mode="HTML"
+    )
+    return SELECT_MANUAL_QUANTITY
+
+
+
 @block_check
 async def handle_manual_quantity_input(update, context):
     handled = await handle_text(update, context)
@@ -767,8 +810,8 @@ async def handle_manual_quantity_input(update, context):
         f"📝 <b>Confirm your MANUAL order</b>\n\n"
         f"🛍️ <b>Product:</b> {product.name}\n"
         f"🔢 <b>Quantity:</b> {qty}\n"
-        f"💵 <b>Total Price:</b> ${normalize_amount(total)}\n\n"
-        f"⚠️ <i>Your balance (${normalize_amount(wallet.balance)}) is sufficient. It will be deducted once the admin processes your order.</i>",
+        f"💵 <b>Total Price:</b> ${fmt_money(total)}\n\n"
+        f"⚠️ <i>Your balance (${fmt_money(wallet.balance)}) is sufficient. It will be deducted once the admin processes your order.</i>",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="HTML"
     )
@@ -807,14 +850,19 @@ async def handle_manual_purchase_confirmation(update: Update, context: ContextTy
         return ConversationHandler.END
 
     # Save to database (NO balance deduction)
+    # Retrieve PUBG ID if it was captured
+    pubg_id = context.user_data.get("manual_pubg_id", None)
+
+    # Save to database (NO balance deduction)
     @sync_to_async
     def create_pending_manual_order():
         with transaction.atomic():
             order = Order.objects.create(
                 user=telegram_user,
                 total_price=total,
-                status="Admin Pending", # ✅ Using our new status
-                order_type="Manual"
+                status="Admin Pending",
+                order_type="Manual",
+                pubg_id=pubg_id # ✅ Save the PUBG ID here
             )
             OrderItem.objects.create(
                 order=order,
@@ -823,6 +871,41 @@ async def handle_manual_purchase_confirmation(update: Update, context: ContextTy
                 unit_price=product.price
             )
             return order
+
+    order = await create_pending_manual_order()
+
+    # Create dynamic PUBG ID text for notifications
+    pubg_text_admin = f"🎮 <b>PUBG ID:</b> <code>{pubg_id}</code>\n" if pubg_id else ""
+    pubg_text_user = f"🎮 <b>PUBG ID:</b> <code>{pubg_id}</code>\n" if pubg_id else ""
+
+    # Inform Customer
+    await query.edit_message_text(
+        f"✅ <b>Manual Order Placed Successfully!</b>\n\n"
+        f"🔖 <b>Order ID:</b> <code>{order.id}</code>\n"
+        f"🛍️ <b>Product:</b> {product.name}\n"
+        f"{pubg_text_user}"
+        f"⏳ <b>Status:</b> Pending Admin Processing\n\n"
+        f"Thank you! We will process this shortly.",
+        parse_mode="HTML"
+    )
+
+    # Inform Admin
+    admin_chat_id = await get_admin_chat_id() 
+    
+    admin_text = (
+        f"🚨 <b>NEW MANUAL ORDER ALERT</b> 🚨\n\n"
+        f"👤 <b>Customer ID:</b> <code>{telegram_user.telegram_id}</code>\n"
+        f"🔖 <b>Order ID:</b> <code>{order.id}</code>\n"
+        f"📌 <b>Status:</b> 🟡 Admin Pending\n\n"
+        f"🛍️ <b>Product Info:</b>\n"
+        f"├ 📦 Name: <b>{product.name}</b>\n"
+        f"├ 🔢 Quantity: <b>{qty}</b>\n"
+        f"└ 💵 Total Cost: <b>${normalize_amount(total)}</b>\n\n"
+        f"{pubg_text_admin}" # ✅ Adds PUBG ID cleanly if it exists
+        f"💳 <b>Customer Wallet:</b>\n"
+        f"└ Current Balance: <b>${normalize_amount(wallet.balance)}</b> (Sufficient ✅)\n\n"
+        f"⚙️ <i>Action Required: Please process this order in the Django Admin Panel. The balance has NOT been deducted yet.</i>"
+    )
 
     order = await create_pending_manual_order()
 
@@ -864,6 +947,7 @@ async def handle_manual_purchase_confirmation(update: Update, context: ContextTy
 
     context.user_data.clear()
     return ConversationHandler.END
+# ======================= Manual Order Flow =============================
     
     
     

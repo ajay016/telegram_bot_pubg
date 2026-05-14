@@ -177,6 +177,7 @@
                     <th>#</th>
                     <th>Order ID</th>
                     <th>Customer TG</th>
+                    <th>Game ID</th>
                     <th>Product</th>
                     <th>Qty</th>
                     <th>Total ($)</th>
@@ -347,6 +348,7 @@
                 },
                 { "data": "id", "render": data => `<strong>#${data}</strong>` },
                 { "data": "telegram_id" },
+                { "data": "pubg_id", "render": data => data !== "-" ? `<span class="badge bg-info text-dark">${data}</span>` : `<span class="text-muted">-</span>` }, // ✅ ADDED THIS LINE
                 { "data": "product_name" },
                 { "data": "quantity" },
                 { "data": "total_price", "render": data => `<span class="fw-bold" style="color: var(--accent);">$${data}</span>` },
@@ -386,7 +388,7 @@
                     }
                 }
             ],
-            "order": [[ 6, "desc" ]], // Order by date desc
+            "order": [[ 7, "desc" ]], // Order by date desc
             "language": {
                 "search": "_INPUT_",
                 "searchPlaceholder": "Search TG ID..."
@@ -540,6 +542,11 @@
                             <span class="text-muted">Date & Time</span>
                             <span class="text-white">${data.created_at}</span>
                         </div>
+                        ${data.pubg_id ? `
+                        <div class="order-detail-row">
+                            <span class="text-muted">Game ID</span>
+                            <span class="text-info fw-bold">${data.pubg_id}</span>
+                        </div>` : ''}
                         <div class="order-detail-row">
                             <span class="text-muted">Current Status</span>
                             <span class="badge bg-warning text-dark d-flex align-items-center gap-1" style="font-size: 0.85rem;">
