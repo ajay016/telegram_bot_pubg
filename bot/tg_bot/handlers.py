@@ -32,6 +32,8 @@ from .states import(
     CONFIRM_RECHARGE_PURCHASE,
     SELECT_MANUAL_QUANTITY,
     CONFIRM_MANUAL_PURCHASE,
+    BEP20_AMOUNT_INPUT,
+    BEP20_AMOUNT_CONFIRM,
 )
 from .utils import(
     fmt_money,
@@ -40,6 +42,7 @@ from .utils import(
     normalize_amount,
     notify_admin_order_completed,
     notify_admin_order_pending,
+    release_bep20_after_delay,
 )
 from .database import(
     get_or_create_telegram_user,
@@ -61,6 +64,11 @@ from .database import(
     get_user_by_telegram_id,
     get_wallet_balance,
     get_payment_methods,
+    check_bep20_amount_active,
+    lock_bep20_amount,
+    release_bep20_amount,
+    set_transaction_amount,
+    cancel_bep20_transaction,
 )
 
 
@@ -436,36 +444,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_binance = "binance" in method["api_base_url"].lower() if method.get("api_base_url") else False
 
         if is_binance:
-            user = await get_or_create_telegram_user(update.effective_user)
-            # Generate and store a unique Binance note
-            while True:
-                note = get_random_string(12)
-                print('note before: ', note)
-                if not await note_exists(note):
-                    print('getting notes', note)
-                    break
+            is_bep20 = "bep" in method["name"].lower()
 
-            # Save the note for this 
-            print('note after while loop: ', note)
-            await BinancePayNote.objects.acreate(note=note, user=user)
-
-            # Create transaction (if needed)
-            transaction = await create_topup_transaction(user.id, method_id, note)
-            uid_display = method["uid"] if method.get("api_base_url") else "N/A"
-            name =method["name"] if method.get("api_base_url") else "N/A"
-            
-            if "bep" in method["name"].lower():
-                uid_display = method["address"] if method.get("api_base_url") else "N/A"
-                text = (
-                    f"💸 Kindly deposit your desired amount on {name}\n\n"
-                    f"🪪 <b>Address:</b> <code>{uid_display}</code> (Tap to copy)\n\n"
-                    f"💸 Please send your desired amount to this UID and include the note below:\n\n"
-                    f"📝 <b>Note:</b> <code>{note}</code>\n\n"
-                    f"⚠️ <b>Please send only</b> <code>USDT</code>. After paying, click the ✅ <b>I have paid</b> button.\n\n"
-                    f"🔴 <i>Note: This will be valid for only 30 minutes</i>"
+            if is_bep20:
+                # ✅ NEW BEP20 FLOW — ask user for deposit amount first
+                context.user_data["bep20_method"] = method
+                await query.edit_message_text(
+                    f"💵 <b>BEP20 (BSC) Deposit</b>\n\n"
+                    f"📍 <b>Wallet Address:</b> <code>{method['address']}</code>\n\n"
+                    f"Enter the amount in USD you want to deposit.\n"
+                    f"📌 Example: <code>25.00</code>\n\n"
+                    f"📝 To cancel at any time, send /cancel",
+                    parse_mode="HTML",
                 )
+                return BEP20_AMOUNT_INPUT
+
             else:
+                # ✅ EXISTING BINANCE PAY FLOW (unchanged)
+                user = await get_or_create_telegram_user(update.effective_user)
+                while True:
+                    note = get_random_string(12)
+                    if not await note_exists(note):
+                        break
+
+                await BinancePayNote.objects.acreate(note=note, user=user)
+                transaction = await create_topup_transaction(user.id, method_id, note)
                 uid_display = method["uid"] if method.get("api_base_url") else "N/A"
+                name = method["name"] if method.get("api_base_url") else "N/A"
+
                 text = (
                     f"💸 Kindly deposit your desired amount on {name}\n\n"
                     f"🪪 <b>UID:</b> <code>{uid_display}</code> (Tap to copy)\n\n"
@@ -474,9 +480,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"⚠️ <b>Please send only</b> <code>USDT</code>. After paying, click the ✅ <b>I have paid</b> button.\n\n"
                     f"🔴 <i>Note: This will be valid for only 30 minutes</i>"
                 )
-
-            keyboard = [[InlineKeyboardButton("✅ I have paid", callback_data=f"confirm_{transaction.id}")]]
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+                keyboard = [[InlineKeyboardButton("✅ I have paid", callback_data=f"confirm_{transaction.id}")]]
+                print('binance text==================================: ', f"confirm_{transaction.id}")
+                await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
             
         elif "bybit" in method["api_base_url"].lower():
             # Store method in user session or memory
@@ -507,8 +513,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [[InlineKeyboardButton("🔙 Back to Wallet", callback_data="my_wallet")]]
             await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     
-    
-    elif data.startswith("confirm_"):
+    elif data.startswith("confirm_bep20_"):
+        await confirm_bep20_callback(update, context)
+        return ConversationHandler.END
+
+    elif data.startswith("bep20_cancel_"):
+        await bep20_cancel_callback(update, context)
+        return ConversationHandler.END
+
+    elif data.startswith("confirm_") and not data.startswith("confirm_bep20_"):
+        print('transaction before confirm_id: ', data)
         transaction_id = int(data.split("_")[1])
         print('transaction confirm_id: ', transaction_id)
         chat_id = update.effective_chat.id
@@ -799,7 +813,8 @@ async def handle_manual_purchase_confirmation(update: Update, context: ContextTy
             order = Order.objects.create(
                 user=telegram_user,
                 total_price=total,
-                status="Admin Pending" # ✅ Using our new status
+                status="Admin Pending", # ✅ Using our new status
+                order_type="Manual"
             )
             OrderItem.objects.create(
                 order=order,
@@ -1358,3 +1373,190 @@ async def show_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Operation cancelled.")
     return ConversationHandler.END
+
+
+
+@block_check
+async def handle_bep20_amount_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """State: BEP20_AMOUNT_INPUT — user types the desired deposit amount."""
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END
+
+    raw = update.message.text.strip()
+    try:
+        requested = Decimal(raw).quantize(Decimal("0.01"))
+        if requested <= 0:
+            raise ValueError
+    except Exception:
+        await update.message.reply_text(
+            "❌ Invalid amount. Please enter a positive number (e.g. <code>25.00</code>)\n\n"
+            "To cancel, send /cancel",
+            parse_mode="HTML",
+        )
+        return BEP20_AMOUNT_INPUT
+
+    # Find a unique amount (auto-increment 0.01 per collision)
+    adjusted = requested
+    for _ in range(200):
+        is_taken = await check_bep20_amount_active(adjusted)
+        if not is_taken:
+            break
+        adjusted += Decimal("0.01")
+
+    method = context.user_data.get("bep20_method")
+    address = method["address"]
+    context.user_data["bep20_requested_amount"] = requested
+    context.user_data["bep20_adjusted_amount"] = adjusted
+
+    if adjusted != requested:
+        msg_text = (
+            f"⚠️ <b>Amount Adjusted!</b>\n\n"
+            f"<b>${requested:.2f}</b> is already reserved by another active session.\n\n"
+            f"Your unique deposit amount is:\n"
+            f"👉 <b><u>${adjusted:.2f} USDT</u></b>\n\n"
+            f"📍 <b>Wallet Address:</b>\n<code>{address}</code>\n\n"
+            f"✏️ To proceed, please type the <b>exact amount</b> shown above:\n"
+            f"<code>{adjusted:.2f}</code>\n\n"
+            f"🚫 To cancel, send /cancel"
+        )
+    else:
+        msg_text = (
+            f"💳 <b>BEP20 (BSC) Deposit</b>\n\n"
+            f"📍 <b>Wallet Address:</b>\n<code>{address}</code>\n\n"
+            f"💵 You will deposit exactly: <b>${adjusted:.2f} USDT</b>\n\n"
+            f"✏️ To confirm, type the exact amount:\n"
+            f"<code>{adjusted:.2f}</code>\n\n"
+            f"🚫 To cancel, send /cancel"
+        )
+
+    await update.message.reply_text(msg_text, parse_mode="HTML")
+    return BEP20_AMOUNT_CONFIRM
+
+
+@block_check
+async def handle_bep20_amount_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """State: BEP20_AMOUNT_CONFIRM — user types back the exact amount to confirm."""
+    handled = await handle_text(update, context)
+    if handled:
+        return ConversationHandler.END
+
+    raw = update.message.text.strip()
+    expected: Decimal = context.user_data.get("bep20_adjusted_amount")
+    method = context.user_data.get("bep20_method")
+
+    if expected is None or method is None:
+        await update.message.reply_text("⚠️ Session lost. Please start again.")
+        return ConversationHandler.END
+
+    try:
+        typed = Decimal(raw).quantize(Decimal("0.01"))
+    except Exception:
+        await update.message.reply_text(
+            f"❌ Please type the exact amount:\n<code>{expected:.2f}</code>",
+            parse_mode="HTML",
+        )
+        return BEP20_AMOUNT_CONFIRM
+
+    if typed != expected:
+        await update.message.reply_text(
+            f"❌ <b>Amount doesn't match!</b>\n\n"
+            f"Please type exactly:\n<code>{expected:.2f}</code>",
+            parse_mode="HTML",
+        )
+        return BEP20_AMOUNT_CONFIRM
+
+    # ✅ Amount confirmed — create transaction, store amount, lock it
+    user = await get_or_create_telegram_user(update.effective_user)
+    tx = await create_topup_transaction(user.id, method["id"], note=None)
+    await set_transaction_amount(tx.id, expected)
+    await lock_bep20_amount(user, expected, tx)
+
+    address = method["address"]
+    keyboard = [
+        [InlineKeyboardButton("✅ I have paid", callback_data=f"confirm_bep20_{tx.id}")],
+        [InlineKeyboardButton("❌ Cancel Operation", callback_data=f"bep20_cancel_{tx.id}")],
+    ]
+
+    sent = await update.message.reply_text(
+        f"✅ <b>Amount Confirmed!</b>\n\n"
+        f"📤 Send <b>exactly <code>{expected:.2f} USDT (BEP20/BSC)</code></b> to:\n\n"
+        f"<code>{address}</code>\n\n"
+        f"⚠️ <b>Send the exact amount shown.</b> Any other amount will not be detected.\n\n"
+        f"⏰ This session is valid for <b>20 minutes</b>.\n"
+        f"🕑 This message will be deleted automatically after 20 minutes.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML",
+    )
+
+    # Auto-release lock and delete message after 20 minutes
+    asyncio.create_task(
+        release_bep20_after_delay(
+            context.bot, update.effective_chat.id, sent.message_id, expected, delay=22 * 60
+        )
+    )
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+@block_check
+async def confirm_bep20_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Callback: user clicked 'I have paid' for BEP20."""
+    query = update.callback_query
+    await query.answer()
+
+    transaction_id = int(query.data.split("_")[-1])
+    chat_id = update.effective_chat.id
+    print(f"\n[BEP20 BOT] 'I have paid' clicked — transaction_id={transaction_id}")
+    full_url = f"{settings.BOT_API_BASE_URL}/api/confirm-bep20-topup/"
+    print(f"[BEP20 BOT] Calling URL: {full_url}")
+
+    async with aiohttp.ClientSession() as http_session:
+        async with http_session.post(
+            f"{settings.BOT_API_BASE_URL}/api/confirm-bep20-topup/",
+            json={"transaction_id": transaction_id},
+        ) as resp:
+            resp_status = resp.status
+            resp_data = await resp.json()
+            print(f"[BEP20 BOT] API response status: {resp_status}")
+            print(f"[BEP20 BOT] API response body: {resp_data}")
+
+    if resp_status == 200 and resp_data.get("success"):
+        amount = resp_data["amount"]
+        balance = resp_data["balance"]
+        print(f"[BEP20 BOT] ✅ Payment verified — amount={amount}, new_balance={balance}")
+        await query.edit_message_text(
+            f"✅ <b>Payment received successfully!</b>\n\n"
+            f"💰 <b>${float(amount):.2f} USDT</b> has been added to your wallet.\n"
+            f"💼 <b>New Balance:</b> <code>${balance}</code>",
+            parse_mode="HTML",
+        )
+        await show_wallet_info(chat_id, context, telegram_id=resp_data["telegram_id"])
+    else:
+        from datetime import datetime
+        checked_at = datetime.now().strftime("%H:%M:%S")
+        print(f"[BEP20 BOT] ❌ Verification failed at {checked_at} — reason: {resp_data.get('detail')}")
+        keyboard = [
+            [InlineKeyboardButton("🔄 Verify Again", callback_data=f"confirm_bep20_{transaction_id}")],
+            [InlineKeyboardButton("❌ Cancel Operation", callback_data=f"bep20_cancel_{transaction_id}")],
+        ]
+        await query.edit_message_text(
+            f"❌ <b>No matching deposit found.</b>\n\n"
+            f"🕐 Last checked at: <code>{checked_at}</code>\n\n"
+            f"Please make sure you sent the <b>exact amount</b> and wait a few moments before trying again.\n\n"
+            f"🔄 Tap <b>Verify Again</b> to recheck.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="HTML",
+        )
+
+
+@block_check
+async def bep20_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Callback: user clicked 'Cancel Operation' on the BEP20 payment message."""
+    query = update.callback_query
+    await query.answer()
+
+    transaction_id = int(query.data.split("_")[-1])
+    await cancel_bep20_transaction(transaction_id)
+    await query.edit_message_text("❌ BEP20 payment operation cancelled.")

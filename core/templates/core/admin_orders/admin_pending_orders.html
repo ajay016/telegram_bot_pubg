@@ -335,7 +335,7 @@
             "processing": true,
             "serverSide": true,
             "ajax": {
-                "url": "{% url 'admin_pending_orders_data' %}",
+                "url": "{{ data_url }}",
                 "type": "GET"
             },
             "columns": [
@@ -357,20 +357,32 @@
                     "searchable": false,
                     "className": "text-end",
                     "render": function (data, type, row) {
-                        return `
+                        const isManual = {{ is_manual|yesno:"true,false" }};
+                        
+                        let buttonsHtml = `
                             <button onclick="openView(${row.id})" class="action-btn view-btn me-1" title="View Details">
                                 <iconify-icon icon="solar:eye-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
                             </button>
-                            <button onclick="openApprove(${row.id})" class="action-btn approve-btn me-1" title="Approve Order">
-                                <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
-                            </button>
-                            <button onclick="openReject(${row.id})" class="action-btn reject-btn me-1" title="Reject Order">
-                                <iconify-icon icon="solar:close-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
-                            </button>
+                        `;
+
+                        if (!isManual) {
+                            buttonsHtml += `
+                                <button onclick="openApprove(${row.id})" class="action-btn approve-btn me-1" title="Approve Order">
+                                    <iconify-icon icon="solar:check-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                                </button>
+                                <button onclick="openReject(${row.id})" class="action-btn reject-btn me-1" title="Reject Order">
+                                    <iconify-icon icon="solar:close-circle-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
+                                </button>
+                            `;
+                        }
+
+                        buttonsHtml += `
                             <button onclick="openDelete(${row.id})" class="action-btn delete-btn" title="Delete Order">
                                 <iconify-icon icon="solar:trash-bin-trash-bold-duotone" style="font-size: 1.2rem;"></iconify-icon>
                             </button>
                         `;
+
+                        return buttonsHtml;
                     }
                 }
             ],

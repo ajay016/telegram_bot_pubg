@@ -35,10 +35,20 @@
         <!-- Vouvhers-->
 
         <!-- Admin Orders -->
-        <a href="{% url 'admin_pending_orders' %}" class="sidebar-link {% if request.resolver_match.url_name == 'customer_balances' %}active{% endif %}">
-            <iconify-icon icon="solar:users-group-two-rounded-bold-duotone" class="menu-icon"></iconify-icon>
+        <a href="#" class="sidebar-link submenu-trigger" aria-expanded="false">
+            <iconify-icon icon="solar:ticket-bold-duotone" class="menu-icon"></iconify-icon>
             Admin Orders
+            <iconify-icon icon="solar:alt-arrow-down-bold-duotone" class="arrow-icon"></iconify-icon>
         </a>
+
+        <div class="sidebar-submenu-wrapper">
+            <div class="sidebar-submenu-inner">
+                <ul class="sidebar-submenu">
+                    <li><a href="{% url 'admin_pending_orders' %}">Manual Pending Orders</a></li>
+                    <li><a href="{% url 'manual_orders_view' %}">Manual Orders</a></li>
+                </ul>
+            </div>
+        </div>
         <!-- Admin Orders -->
     </div>
 </aside>

@@ -1,3 +1,4 @@
+from email.mime import application
 import os
 import django
 import asyncio
@@ -18,7 +19,8 @@ from bot.tg_bot.states import *
 from bot.tg_bot.handlers import (
     handle_manual_purchase_confirmation, handle_manual_quantity_input, start, button_handler, handle_text, handle_amount_input,
     handle_quantity_input, handle_purchase_confirmation,
-    handle_recharge_quantity_input, confirm_recharge_purchase_callback, cancel
+    handle_recharge_quantity_input, confirm_recharge_purchase_callback, cancel,
+    handle_bep20_amount_input, handle_bep20_amount_confirm, confirm_bep20_callback, bep20_cancel_callback,
 )
 
 BOT_TOKEN = settings.TELEGRAM_BOT_TOKEN
@@ -61,6 +63,12 @@ conv_handler = ConversationHandler(
         CONFIRM_MANUAL_PURCHASE: [
             CallbackQueryHandler(handle_manual_purchase_confirmation)
         ],
+        BEP20_AMOUNT_INPUT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bep20_amount_input)
+        ],
+        BEP20_AMOUNT_CONFIRM: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bep20_amount_confirm)
+        ],
     },
     fallbacks=[
         CommandHandler("cancel", cancel),
@@ -79,6 +87,8 @@ class Command(BaseCommand):
         application.add_handler(conv_handler)
         application.add_handler(CallbackQueryHandler(button_handler))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        application.add_handler(CallbackQueryHandler(confirm_bep20_callback, pattern=r"^confirm_bep20_\d+$"))
+        application.add_handler(CallbackQueryHandler(bep20_cancel_callback, pattern=r"^bep20_cancel_\d+$"))
 
         async def post_init(app):
             # Set commands

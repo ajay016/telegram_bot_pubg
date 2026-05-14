@@ -5,6 +5,7 @@ from django.db import transaction
 from django.core.paginator import Paginator
 from django.contrib.admin.views.decorators import staff_member_required
 import requests
+from django.urls import reverse
 from django.db.models import Sum, Q
 import json
 from .models import *
@@ -424,7 +425,21 @@ def transaction_details_view(request, tx_id):
 
 @staff_member_required(login_url='admin:login')
 def admin_pending_orders_view(request):
-    return render(request, 'core/admin_orders/admin_pending_orders.html')
+    context = {
+        'data_url': reverse('admin_pending_orders_data'),
+        'is_manual': False
+    }
+    return render(request, 'core/admin_orders/admin_pending_orders.html', context)
+
+
+
+@staff_member_required(login_url='admin:login')
+def manual_orders_view(request):
+    context = {
+        'data_url': reverse('manual_orders_data'),
+        'is_manual': True
+    }
+    return render(request, 'core/admin_orders/admin_pending_orders.html', context)
 
 
 
@@ -451,6 +466,53 @@ def admin_pending_orders_data(request):
     data = []
     for order in page_obj:
         # Assuming you want to show the first product name in the table
+        first_item = order.items.first()
+        product_name = first_item.product.name if first_item else "Unknown"
+        qty = first_item.quantity if first_item else 0
+
+        data.append({
+            "id": order.id,
+            "telegram_id": order.user.telegram_id,
+            "username": order.user.username or "N/A",
+            "product_name": product_name,
+            "quantity": qty,
+            "total_price": str(order.total_price),
+            "date": order.created_at.strftime("%Y-%m-%d %H:%M"),
+        })
+
+    return JsonResponse({
+        "draw": draw,
+        "recordsTotal": orders.count(),
+        "recordsFiltered": paginator.count,
+        "data": data
+    })
+    
+    
+
+@staff_member_required(login_url='admin:login')
+def manual_orders_data(request):
+    # DataTables Server-Side Processing
+    draw = int(request.GET.get('draw', 1))
+    start = int(request.GET.get('start', 0))
+    length = int(request.GET.get('length', 10))
+    search_value = request.GET.get('search[value]', '')
+
+    # FILTER BY ORDER TYPE MANUAL AND EXCLUDE PENDING ORDERS
+    orders = Order.objects.filter(order_type="Manual").exclude(status__in=["Pending", "Admin Pending"]).select_related('user').order_by('-created_at')
+
+    if search_value:
+        orders = orders.filter(
+            Q(id__icontains=search_value) | 
+            Q(user__telegram_id__icontains=search_value) |
+            Q(user__username__icontains=search_value)
+        )
+
+    paginator = Paginator(orders, length)
+    page_number = (start // length) + 1
+    page_obj = paginator.get_page(page_number)
+
+    data = []
+    for order in page_obj:
         first_item = order.items.first()
         product_name = first_item.product.name if first_item else "Unknown"
         qty = first_item.quantity if first_item else 0

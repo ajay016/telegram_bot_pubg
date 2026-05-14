@@ -30,6 +30,8 @@ urlpatterns = [
     #Admin Orders
     path('admin-orders/', views.admin_pending_orders_view, name='admin_pending_orders'),
     path('admin-orders/data/', views.admin_pending_orders_data, name='admin_pending_orders_data'),
+    path('admin-manual-orders/', views.manual_orders_view, name='manual_orders_view'),
+    path('admin-manual-orders/data/', views.manual_orders_data, name='manual_orders_data'),
     path('admin-orders/<int:order_id>/details/', views.order_details_api, name='order_details_api'),
     path('admin-orders/<int:order_id>/approve/', views.approve_order_api, name='approve_order_api'),
     path('admin-orders/<int:order_id>/reject/', views.reject_order_api, name='reject_order_api'),

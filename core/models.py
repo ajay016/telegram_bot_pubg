@@ -488,3 +488,19 @@ class Announcement(models.Model):
         if self.show_until and now > self.show_until:
             return False
         return True
+    
+    
+
+class BEP20ActiveAmount(models.Model):
+    user = models.ForeignKey(TelegramUser, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, unique=True)
+    transaction = models.ForeignKey(
+        Transaction, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        return timezone.now() > self.created_at + timedelta(minutes=20)
+
+    def __str__(self):
+        return f"${self.amount} locked by {self.user}"

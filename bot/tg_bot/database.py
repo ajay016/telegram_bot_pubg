@@ -4,6 +4,7 @@ from django.db import transaction
 from asgiref.sync import sync_to_async
 from decimal import Decimal, ROUND_DOWN
 from django.db.models import Sum
+from datetime import timedelta
 from core.models import *
 from core.decorators import block_check
 
@@ -394,3 +395,45 @@ def get_top_buyers(limit=5):
     ).order_by('-total_spent')[:limit]
 
     return list(top_users)
+
+
+
+# ===================== BEP20 functions =====================
+@sync_to_async
+def check_bep20_amount_active(amount):
+    """Clean up expired locks, then check if amount is taken."""
+    cutoff = timezone.now() - timedelta(minutes=22)
+    BEP20ActiveAmount.objects.filter(created_at__lt=cutoff).delete()
+    return BEP20ActiveAmount.objects.filter(amount=amount).exists()
+
+
+@sync_to_async
+def lock_bep20_amount(user, amount, transaction_obj):
+    """Lock an amount for an active BEP20 session."""
+    obj, created = BEP20ActiveAmount.objects.get_or_create(
+        amount=amount,
+        defaults={"user": user, "transaction": transaction_obj},
+    )
+    return obj, created
+
+
+@sync_to_async
+def release_bep20_amount(amount):
+    """Release a locked BEP20 amount."""
+    BEP20ActiveAmount.objects.filter(amount=amount).delete()
+
+
+@sync_to_async
+def set_transaction_amount(transaction_id, amount):
+    """Store confirmed amount on a pending transaction."""
+    Transaction.objects.filter(id=transaction_id).update(amount=amount)
+
+
+@sync_to_async
+def cancel_bep20_transaction(transaction_id):
+    """Mark transaction failed and release its locked amount."""
+    tx = Transaction.objects.filter(id=transaction_id).first()
+    if tx:
+        BEP20ActiveAmount.objects.filter(amount=tx.amount).delete()
+        tx.status = "failed"
+        tx.save(update_fields=["status"])

@@ -195,3 +195,16 @@ async def _send_broadcast(announcement_id):
 def trigger_broadcast(announcement_id):
     """Synchronous wrapper to call from Django Admin"""
     asyncio.run(_send_broadcast(announcement_id))
+    
+    
+
+# =============== BEP20 UTILS ===============
+async def release_bep20_after_delay(bot, chat_id, message_id, amount, delay=20 * 60):
+    """After `delay` seconds, release the BEP20 amount lock and delete the message."""
+    await asyncio.sleep(delay)
+    from .database import release_bep20_amount  # local import avoids circular
+    await release_bep20_amount(amount)
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception as e:
+        print(f"Failed to delete BEP20 message: {e}")

@@ -315,4 +315,171 @@ class ConfirmTopUpView(APIView):
                     })
         
         return Response({"detail": "❌ No matching Binance transaction found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    
+    
+class ConfirmBEP20TopUpView(APIView):
+    def post(self, request):
+        transaction_id = request.data.get("transaction_id")
+        print(f"\n{'='*50}")
+        print(f"[BEP20] Verification requested for transaction_id: {transaction_id}")
+
+        if not transaction_id:
+            return Response({"detail": "Missing transaction_id."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tx = Transaction.objects.select_related("user").get(
+                id=transaction_id,
+                status="pending",
+                transaction_type="topup",
+                direction="credit",
+            )
+            print(f"[BEP20] Transaction found: id={tx.id}, amount={tx.amount}, status={tx.status}, created_at={tx.created_at}")
+        except Transaction.DoesNotExist:
+            print(f"[BEP20] ❌ Transaction not found or already processed for id={transaction_id}")
+            return Response(
+                {"detail": "❌ Transaction not found or already processed."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if tx.is_expired():
+            print(f"[BEP20] ❌ Transaction {transaction_id} is expired.")
+            BEP20ActiveAmount.objects.filter(amount=tx.amount).delete()
+            return Response({"detail": "⏰ This payment session has expired."}, status=status.HTTP_410_GONE)
+
+        amount = tx.amount
+        # created_at_ms = int(tx.created_at.timestamp() * 1000 - 1000 * 60 * 60 * 72)
+        # Search deposits only after payment session started
+        # subtract 2 minutes buffer for safety
+        created_at_ms = int(tx.created_at.timestamp() * 1000) - (1000 * 60 * 2)
+        # Current time
+        end_time_ms = int(timezone.now().timestamp() * 1000)
+        print(f"[BEP20] tx.created_at = {tx.created_at}")
+        print(f"[BEP20] created_at_ms = {created_at_ms}")
+        print(
+            f"[BEP20] Looking for deposits AFTER session start "
+            f"— amount={amount}, startTime={created_at_ms}"
+        )
+
+        try:
+            params = {
+                "coin": "USDT",
+                "startTime": created_at_ms,
+                "endTime": end_time_ms,
+                "limit": 100,
+            }
+
+            print(f"[BEP20] Request params => {params}")
+            
+            deposit_data = binance_signed_request(
+                "/sapi/v1/capital/deposit/hisrec",
+                params,
+            )
+
+            print(f"[BEP20] Binance response type before parsing: {type(deposit_data)}")
+            print(f"[BEP20] Raw Binance API response: {deposit_data}")
+        except Exception as e:
+            print(f"[BEP20] ❌ Binance API exception: {e}")
+            return Response({"detail": "❌ Binance API error."}, status=status.HTTP_502_BAD_GATEWAY)
+
+        print(f"[BEP20] Raw Binance API response type: {type(deposit_data)}")
+        print(f"[BEP20] Raw Binance API response: {deposit_data}")
+
+        # Handle both raw list and dict-wrapped responses
+        if isinstance(deposit_data, list):
+            deposit_list = deposit_data
+        elif isinstance(deposit_data, dict):
+            # Try common Binance wrapper keys
+            deposit_list = (
+                deposit_data.get("data")
+                or deposit_data.get("depositList")
+                or []
+            )
+        else:
+            deposit_list = []
+
+        print("\n" + "=" * 80)
+        print("[BEP20] ALL DEPOSITS RETURNED FROM BINANCE")
+        print("=" * 80)
+
+        for i, deposit in enumerate(deposit_list):
+            print(f"\n[BEP20] Deposit [{i}] FULL DATA:")
+            print(deposit)
+
+        print("\n" + "=" * 80)
+        print("[BEP20] STARTING MATCH CHECK")
+        print("=" * 80)
+
+        for i, deposit in enumerate(deposit_list):
+            dep_amount = deposit.get("amount", "0")
+            dep_status = deposit.get("status")
+            dep_txid = deposit.get("txId", "")
+            dep_insert_time = deposit.get("insertTime")
+            dep_coin = deposit.get("coin")
+            dep_network = deposit.get("network")
+            dep_address = deposit.get("address")
+
+            print(
+                f"[BEP20] Deposit [{i}] => "
+                f"amount={dep_amount}, "
+                f"status={dep_status}, "
+                f"txId={dep_txid}, "
+                f"insertTime={dep_insert_time}, "
+                f"coin={dep_coin}, "
+                f"network={dep_network}, "
+                f"address={dep_address}"
+            )
+
+            if dep_status != 1:
+                print(f"[BEP20]   ↳ Skipped — status {dep_status} is not 1 (success)")
+                continue
+
+            if Decimal(str(dep_amount)) != amount:
+                print(f"[BEP20]   ↳ Skipped — amount {dep_amount} != expected {amount}")
+                continue
+
+            print(f"[BEP20] ✅ Matching deposit found! txId={dep_txid}, amount={dep_amount}")
+
+            if dep_txid and PaymentTransaction.objects.filter(tx_id=dep_txid).exists():
+                print(f"[BEP20] ❌ Already processed txId={dep_txid}")
+                return Response(
+                    {"detail": "❌ This transaction has already been processed."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            wallet, _ = Wallet.objects.get_or_create(telegram_user=tx.user)
+            wallet.balance += amount
+            wallet.save()
+            print(f"[BEP20] Wallet updated — new balance: {wallet.balance}")
+
+            tx.status = "confirmed"
+            if dep_txid:
+                tx.tx_id = dep_txid
+            tx.save()
+
+            PaymentTransaction.objects.create(
+                user=tx.user,
+                wallet=wallet,
+                payment_method=tx.payment_method,
+                topup_transaction=tx,
+                amount=amount,
+                tx_id=dep_txid or None,
+                status="completed",
+            )
+
+            BEP20ActiveAmount.objects.filter(amount=amount).delete()
+            print(f"[BEP20] ✅ Payment confirmed and wallet credited.")
+
+            return Response({
+                "success": True,
+                "amount": f"{amount:.2f}",
+                "balance": f"{wallet.balance:.2f}",
+                "telegram_id": tx.user.telegram_id,
+            })
+
+        print(f"[BEP20] ❌ No matching deposit found after checking {len(deposit_list)} records.")
+        return Response(
+            {"detail": "❌ No matching BEP20 deposit found. Please wait a moment and try again."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 

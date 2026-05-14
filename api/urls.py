@@ -30,4 +30,5 @@ urlpatterns = [
     path('payment-methods/<int:id>/', views.PaymentMethodDetailView.as_view(), name='payment-method-detail'),
     
     path("confirm-topup/", views.ConfirmTopUpView.as_view(), name="confirm-topup"),
+    path("confirm-bep20-topup/", views.ConfirmBEP20TopUpView.as_view(), name="confirm-bep20-topup"),
 ]
