@@ -53,7 +53,6 @@ from .database import(
     get_wallet_by_telegram_id,
     get_all_payment_methods,
     get_products_by_category,
-    get_categories_pubg,
     get_product_detail,
     get_product_and_wallet,
     get_payment_method_info,
