@@ -236,7 +236,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🆕 MANUAL ORDER FLOW (Add inside button_handler)
     # ==========================================
     elif data == "manual_order":
-        categories = await get_categories_pubg()
+        categories = await get_categories()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
             for cat in categories
@@ -610,7 +610,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return True
     
     elif "Manual Order" in text:
-        categories = await get_categories_pubg()
+        categories = await get_categories()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
             for cat in categories
@@ -849,7 +849,16 @@ async def handle_manual_purchase_confirmation(update: Update, context: ContextTy
 
     product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
-    # Final sanity check before saving order
+    # 1. Double check manual order flags (Security check)
+    # We use sync_to_async check or assume pre-fetched category
+    is_manual_product = product.is_manual
+    is_manual_category = product.category.is_manual if product.category else True
+
+    if not is_manual_product or not is_manual_category:
+        await query.edit_message_text("❌ Error: This product is no longer available for manual ordering.")
+        return ConversationHandler.END
+
+    # 2. Final sanity check for balance and stock
     if wallet.balance < total or product.stock_quantity < qty:
         await query.edit_message_text("⚠️ Order failed due to insufficient balance or stock changes.")
         return ConversationHandler.END
@@ -1140,6 +1149,15 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 
     product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
+    # 1. Double check normal order flags (Security check)
+    is_normal_product = product.is_normal
+    is_normal_category = product.category.is_normal if product.category else True
+
+    if not is_normal_product or not is_normal_category:
+        await query.edit_message_text("❌ Error: This product is no longer available for standard purchase.")
+        return ConversationHandler.END
+
+    # 2. Final sanity check for balance and stock
     if wallet.balance < total or product.stock_quantity < qty:
         await query.edit_message_text("⚠️ Purchase failed due to insufficient balance or stock.")
         return ConversationHandler.END

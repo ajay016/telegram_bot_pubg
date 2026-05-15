@@ -54,6 +54,8 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+    
+    
 
 class SubCategory(models.Model):
     category    = models.ForeignKey(
@@ -65,6 +67,8 @@ class SubCategory(models.Model):
     slug        = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active   = models.BooleanField(default=True)
+    is_normal   = models.BooleanField(default=True)
+    is_manual   = models.BooleanField(default=False)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
 
@@ -118,6 +122,8 @@ class Product(models.Model):
     price          = models.DecimalField(max_digits=10, decimal_places=3)
     in_stock       = models.BooleanField(default=True)
     stock_quantity = models.PositiveIntegerField(default=0)
+    is_normal      = models.BooleanField(default=True)
+    is_manual      = models.BooleanField(default=False)
 
     # Relationship: either category or subcategory must be set (but not both)
     category    = models.ForeignKey(

@@ -62,14 +62,13 @@ def get_all_payment_methods():
 
 @sync_to_async
 def get_categories():
-    return list(Category.objects.all().values("id", "name"))
-
-
+    # Only show categories marked for Normal/Standard orders
+    return list(Category.objects.filter(is_active=True, is_normal=True).values("id", "name"))
 
 @sync_to_async
-def get_categories_pubg():
-    # Filters categories to only show active ones that have 'pubg' in the slug
-    return list(Category.objects.filter(is_active=True, slug__icontains="pubg").values("id", "name"))
+def get_categories_manual_order():
+    # Only show categories marked for Manual orders
+    return list(Category.objects.filter(is_active=True, is_manual=True).values("id", "name"))
 
 
 
@@ -81,7 +80,21 @@ def get_recharge_categories():
 
 @sync_to_async
 def get_products_by_category(category_id):
-    return list(Product.objects.filter(category_id=category_id).values('id', 'name', 'price', 'stock_quantity'))
+    # Only show products belonging to this category that are for Normal orders
+    return list(Product.objects.filter(
+        category_id=category_id, 
+        is_normal=True
+    ).values('id', 'name', 'price', 'stock_quantity'))
+    
+    
+
+@sync_to_async
+def get_products_by_category_manual_order(category_id):
+    # Only show products belonging to this category that are for Manual orders
+    return list(Product.objects.filter(
+        category_id=category_id, 
+        is_manual=True
+    ).values('id', 'name', 'price', 'stock_quantity'))
 
 
 
