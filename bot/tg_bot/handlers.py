@@ -155,13 +155,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Edit the existing message for a smooth "back" transition
         await update.callback_query.edit_message_text(
             text=welcome_text,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            parse_mode="HTML"
         )
     else:
         # Send a new message if the user typed /start
         await update.message.reply_text(
             text=welcome_text,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            parse_mode="HTML"
         )
     
     
@@ -194,10 +196,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Payment methods
         payment_methods = await get_all_payment_methods()
 
+        # text = (
+        #     f"👛 <b>Wallet Information</b>\n\n"
+        #     f"🆔 <b>Telegram ID:</b> <code>{telegram_user.telegram_id}</code>\n"
+        #     f"💰 <b>Current Balance:</b> <code>${fmt_money(wallet.balance)}</code>\n\n"
+        #     f"✨ Select a top up method:"
+        # )
+        
         text = (
             f"👛 <b>Wallet Information</b>\n\n"
-            f"🆔 <b>Telegram ID:</b> <code>{telegram_user.telegram_id}</code>\n"
-            f"💰 <b>Current Balance:</b> <code>${fmt_money(wallet.balance)}</code>\n\n"
+            f'<tg-emoji emoji-id="5296453673998640835">🆔</tg-emoji> <b>Telegram ID:</b> <code>{telegram_user.telegram_id}</code>\n'
+            f'<tg-emoji emoji-id="5296453673998640835">💰</tg-emoji> <b>Current Balance:</b> <code>${fmt_money(wallet.balance)}</code>\n\n'
             f"✨ Select a top up method:"
         )
 
@@ -427,6 +436,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="main_menu")]]
         await query.edit_message_text(text_response, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
         return ConversationHandler.END
+    
+    elif data == "contact_support":
+        support_text = (
+            "📞 We're here to help! If you have any questions or need assistance, please choose an option below:\n\n"
+            "🔹 Contact Support: Reach out to our support team directly.\n"
+            "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msngamerofficial).\n\n"
+            "✨ Feel free to ask anything!"
+        )
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("👨‍💻 Contact Support", url="https://t.me/msngamer"),
+                InlineKeyboardButton("📢 Support Channel", url="https://t.me/msngamerofficial")
+            ],
+            [InlineKeyboardButton("🔙 Back", callback_data="main_menu")]
+        ]
+        
+        await query.edit_message_text(
+            text=support_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
 
     elif data == "my_orders":
         tg_user = await get_or_create_telegram_user(update.effective_user)
@@ -647,8 +679,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             f"👛 <b>Wallet Information</b>:\n\n"
             f"Hello, <b>{display_name}</b>! Your wallet balance as of <i>{current_date}</i>:\n\n"
-            f"🆔 <b>Telegram ID:</b> <code>{telegram_id}</code>\n"
-            f"💰 <b>Current Balance:</b> <code>${normalize_amount(balance)}</code>\n\n"
+            f'<tg-emoji emoji-id="5296453673998640835">🆔</tg-emoji> <b>Telegram ID:</b> <code>{telegram_id}</code>\n'
+            f'<tg-emoji emoji-id="5296453673998640835">💰</tg-emoji> <b>Current Balance:</b> <code>${normalize_amount(balance)}</code>\n\n'
             f"✨ Would you like to top up your wallet? Use one of the following methods:"
         )
 
@@ -719,15 +751,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # elif "Game ID Recharge (Auto)" in text:
     #     await update.message.reply_text("Please send your Game ID to proceed.")
 
-    elif "Contact Support" in text:
-        await update.message.reply_text(
+    elif "Contact Support" in text or text.lower() == "support":
+        support_text = (
             "📞 We're here to help! If you have any questions or need assistance, please choose an option below:\n\n"
             "🔹 Contact Support: Reach out to our support team directly.\n"
             "🔹 Visit Support Channel: [Check out our support channel for FAQs and updates](https://t.me/msngamerofficial).\n\n"
-            "✨ Feel free to ask anything!",
-            parse_mode="Markdown"
+            "✨ Feel free to ask anything!"
         )
         
+        keyboard = [
+            [
+                InlineKeyboardButton("👨‍💻 Contact Support", url="https://t.me/MSN_GAMERS"),
+                InlineKeyboardButton("📢 Support Channel", url="https://t.me/msngamerofficial")
+            ]
+        ]
+        
+        await update.message.reply_text(
+            text=support_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
         return True
 
     elif "API" in text:
@@ -1265,7 +1309,7 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
             f"📝 <b>Note:</b>\n"
             f"ℹ️ Kindly check the attached file for product information.\n"
             f"🔒 Do not share the file with anyone else.\n"
-            f"🤔 If you have any problem, contact us @MSN_GAMERS"
+            f"🤔 If you have any problem, contact us @msngamer"
         ),
         parse_mode="HTML",
     )
