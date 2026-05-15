@@ -602,29 +602,20 @@ def approve_order_api(request, order_id):
         message = request.POST.get('message', 'Here is your requested order!')
         uploaded_file = request.FILES.get('file')
 
-        with transaction.atomic():
-            wallet = order.user.wallet  # Assuming OneToOne or ForeignKey relation
-            
-            # Final balance check before deducting
-            if wallet.balance < order.total_price:
-                return JsonResponse({"status": "error", "message": "Customer has insufficient balance. Cannot approve."})
+        wallet = order.user.wallet
 
-            # Deduct balance
-            wallet.balance -= order.total_price
-            wallet.save()
-
-            # Update Order
-            order.status = "Completed"
-            order.admin_response_text = message
-            if uploaded_file:
-                order.delivery_file = uploaded_file
-            order.save()
+        # Update Order (No balance deduction needed, already deducted)
+        order.status = "Completed"
+        order.admin_response_text = message
+        if uploaded_file:
+            order.delivery_file = uploaded_file
+        order.save()
 
         # Send to Telegram
         telegram_text = f"✅ <b>Order #{order.id} Approved!</b>\n\n{message}\n\n💰 <b>Remaining Balance:</b> ${wallet.balance}"
         send_telegram_notification(order.user.telegram_id, telegram_text, uploaded_file)
 
-        return JsonResponse({"status": "success", "message": "Order approved & balance deducted."})
+        return JsonResponse({"status": "success", "message": "Order approved successfully."})
 
 
 
@@ -636,15 +627,22 @@ def reject_order_api(request, order_id):
         
         reason = data.get('reason', 'No reason provided.')
 
-        order.status = "Rejected"
-        order.rejection_reason = reason
-        order.save()
+        with transaction.atomic():
+            # Refund the balance
+            wallet = order.user.wallet
+            wallet.balance += order.total_price
+            wallet.save()
+
+            # Update Order
+            order.status = "Rejected"
+            order.rejection_reason = reason
+            order.save()
 
         # Notify User
-        telegram_text = f"❌ <b>Order #{order.id} Rejected</b>\n\n<b>Reason:</b> {reason}\n<i>Your balance was not deducted.</i>"
+        telegram_text = f"❌ <b>Order #{order.id} Rejected</b>\n\n<b>Reason:</b> {reason}\n\n💵 <i>Your balance of ${order.total_price} has been refunded.</i>\n💰 <b>Current Balance:</b> ${wallet.balance}"
         send_telegram_notification(order.user.telegram_id, telegram_text)
 
-        return JsonResponse({"status": "success", "message": "Order rejected successfully."})
+        return JsonResponse({"status": "success", "message": "Order rejected and balance refunded."})
 
 
 

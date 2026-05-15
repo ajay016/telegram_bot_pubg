@@ -394,8 +394,6 @@ def get_top_buyers(limit=5):
         status='confirmed',
         direction='debit'
     ).values(
-        'user__first_name',
-        'user__username',
         'user__telegram_id'
     ).annotate(
         total_spent=Sum('amount')
