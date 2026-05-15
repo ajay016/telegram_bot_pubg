@@ -50,6 +50,8 @@ from .database import(
     get_current_announcement,
     get_top_buyers,
     get_categories,
+    get_categories_manual_order,
+    get_products_by_category_manual_order,
     get_wallet_by_telegram_id,
     get_all_payment_methods,
     get_products_by_category,
@@ -235,7 +237,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🆕 MANUAL ORDER FLOW (Add inside button_handler)
     # ==========================================
     elif data == "manual_order":
-        categories = await get_categories()
+        categories = await get_categories_manual_order()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
             for cat in categories
@@ -246,7 +248,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("m_cat_"):
         category_id = int(data.split("_")[2])
-        products = await get_products_by_category(category_id)
+        products = await get_products_by_category_manual_order(category_id)
         if not products:
             await query.edit_message_text("No products found in this category.")
             return
@@ -609,7 +611,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return True
     
     elif "Manual Order" in text:
-        categories = await get_categories()
+        categories = await get_categories_manual_order()
         keyboard = [
             [InlineKeyboardButton(cat["name"], callback_data=f"m_cat_{cat['id']}")]
             for cat in categories
@@ -849,9 +851,13 @@ async def handle_manual_purchase_confirmation(update: Update, context: ContextTy
     product, wallet = await get_product_and_wallet(telegram_user, product_id)
 
     # 1. Double check manual order flags (Security check)
-    # We use sync_to_async check or assume pre-fetched category
     is_manual_product = product.is_manual
-    is_manual_category = product.category.is_manual if product.category else True
+
+    @sync_to_async
+    def get_category_is_manual(p):
+        return p.category.is_manual if p.category_id else True
+
+    is_manual_category = await get_category_is_manual(product)
 
     if not is_manual_product or not is_manual_category:
         await query.edit_message_text("❌ Error: This product is no longer available for manual ordering.")
@@ -1150,7 +1156,12 @@ async def handle_purchase_confirmation(update: Update, context: ContextTypes.DEF
 
     # 1. Double check normal order flags (Security check)
     is_normal_product = product.is_normal
-    is_normal_category = product.category.is_normal if product.category else True
+
+    @sync_to_async
+    def get_category_is_normal(p):
+        return p.category.is_normal if p.category_id else True
+
+    is_normal_category = await get_category_is_normal(product)
 
     if not is_normal_product or not is_normal_category:
         await query.edit_message_text("❌ Error: This product is no longer available for standard purchase.")
