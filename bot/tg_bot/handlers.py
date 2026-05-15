@@ -374,7 +374,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             f"🛍️ <b>{product['name']}</b>\n\n"
             f"📝 Description: {product['description']}\n"
-            f"💰 Price: ${price}\n"
+            f"💰 Price: ${fmt_money(price)}\n"
             f"📦 Stock: {product['stock_quantity']} available"
         )
 
@@ -1155,7 +1155,7 @@ async def handle_quantity_input(update, context):
         f"🛒 <b>Confirm your purchase</b>\n\n"
         f"• Product: <b>{product.name}</b>\n"
         f"• Quantity: <b>{qty}</b>\n"
-        f"• Total Price: <b>${normalize_amount(total)}</b>\n"
+        f"• Total Price: <b>${fmt_money(total)}</b>\n"
         f"• Telegram ID: <code>{user_data.id}</code>",
         reply_markup=reply_markup,
         parse_mode="HTML"
