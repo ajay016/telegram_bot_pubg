@@ -45,6 +45,8 @@ class Category(models.Model):
     slug        = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     is_active   = models.BooleanField(default=True)
+    is_normal   = models.BooleanField(default=True)
+    is_manual   = models.BooleanField(default=False)
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
 

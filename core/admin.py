@@ -36,7 +36,8 @@ class SubCategoryInline(TabularInline):
 
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
-    list_display = ('name', 'is_active')
+    list_display = ('name', 'is_active', 'is_normal', 'is_manual')
+    list_filter = ('is_active', 'is_normal', 'is_manual')
     prepopulated_fields = {'slug': ('name',)}
     inlines = [SubCategoryInline]
 
@@ -54,9 +55,9 @@ class RechargeCategoryAdmin(ModelAdmin):
 @admin.register(Product)
 class ProductAdmin(ModelAdmin):
     list_display = (
-        'name', 'get_category', 'get_subcategory', 'price', 'in_stock', 'stock_quantity'
+        'name', 'get_category', 'get_subcategory', 'price', 'in_stock', 'is_normal', 'is_manual'
     )
-    list_filter  = ('in_stock', 'category', 'subcategory')
+    list_filter   = ('is_normal', 'is_manual', 'in_stock', 'category', 'subcategory')
     search_fields = ('name', 'slug', 'description')
     prepopulated_fields = {'slug': ('name',)}
 
