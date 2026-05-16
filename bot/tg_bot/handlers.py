@@ -511,7 +511,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data["bep20_method"] = method
                 await query.edit_message_text(
                     f"💵 <b>BEP20 (BSC) Deposit</b>\n\n"
-                    f"📍 <b>Wallet Address:</b> <code>{method['address']}</code>\n\n"
+                    # f"📍 <b>Wallet Address:</b> <code>{method['address']}</code>\n\n"
                     f"Enter the amount in USD you want to deposit.\n"
                     f"📌 Example: <code>25.00</code>\n\n"
                     f"📝 To cancel at any time, send /cancel",
@@ -1597,7 +1597,7 @@ async def handle_bep20_amount_input(update: Update, context: ContextTypes.DEFAUL
     else:
         msg_text = (
             f"💳 <b>BEP20 (BSC) Deposit</b>\n\n"
-            f"📍 <b>Wallet Address:</b>\n<code>{address}</code>\n\n"
+            # f"📍 <b>Wallet Address:</b>\n<code>{address}</code>\n\n"
             f"💵 You will deposit exactly: <b>${adjusted:.2f} USDT</b>\n\n"
             f"✏️ To confirm, type the exact amount:\n"
             f"<code>{adjusted:.2f}</code>\n\n"
