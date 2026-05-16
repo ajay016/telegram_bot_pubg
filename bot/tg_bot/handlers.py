@@ -144,10 +144,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ✅ Inline keyboard markup
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    # welcome_text = (
+    #     "🏬 Welcome to MSNGamer Bot!\n\n"
+    #     "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
+    #     "🔘 Choose an option below to get started:"
+    # )
+    
     welcome_text = (
-        "🏬 Welcome to MSNGamer Bot!\n\n"
-        "🌴 Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n"
-        "🔘 Choose an option below to get started:"
+        '<tg-emoji emoji-id="5258430006404603743">🏬</tg-emoji> <b>Welcome to MSNGamer Bot!</b>\n\n'
+        '<tg-emoji emoji-id="5395822707373797004">🌴</tg-emoji> Explore our products, check your orders, and get the best deals right here. How can I assist you today?\n\n'
+        '<tg-emoji emoji-id="5298978964444834599">🔘</tg-emoji> Choose an option below to get started:'
     )
 
     # ✅ Check if this was triggered by a button click or a normal command
@@ -586,8 +592,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data = await resp.json()
 
         if resp.status == 200 and data.get("success"):
-            amount = normalize_amount(data['amount'])
-            balance = normalize_amount(data['balance'])
+            amount = fmt_money(data['amount'])
+            balance = fmt_money(data['balance'])
     
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -680,7 +686,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👛 <b>Wallet Information</b>:\n\n"
             f"Hello, <b>{display_name}</b>! Your wallet balance as of <i>{current_date}</i>:\n\n"
             f'<tg-emoji emoji-id="5296453673998640835">🆔</tg-emoji> <b>Telegram ID:</b> <code>{telegram_id}</code>\n'
-            f'<tg-emoji emoji-id="5296453673998640835">💰</tg-emoji> <b>Current Balance:</b> <code>${normalize_amount(balance)}</code>\n\n'
+            f'<tg-emoji emoji-id="5296453673998640835">💰</tg-emoji> <b>Current Balance:</b> <code>${fmt_money(balance)}</code>\n\n'
             f"✨ Would you like to top up your wallet? Use one of the following methods:"
         )
 
@@ -842,7 +848,7 @@ async def handle_manual_quantity_input(update, context):
     # Check balance exactly like standard orders
     if wallet.balance < total:
         await update.message.reply_text(
-            f"❌ You need ${normalize_amount(total)} but your balance is only ${normalize_amount(wallet.balance)}."
+            f"❌ You need ${fmt_money(total)} but your balance is only ${fmt_money(wallet.balance)}."
         )
         return ConversationHandler.END
 
@@ -1052,7 +1058,7 @@ async def handle_amount_input(update, context):
 
     if  "bybit" in method['name'].lower():
         msg = (
-            f"✅ Kindly deposit exactly <b>{normalize_amount(amount)} USDT ({method['name']})</b> to the UID below:\n\n"
+            f"✅ Kindly deposit exactly <b>{fmt_money(amount)} USDT ({method['name']})</b> to the UID below:\n\n"
             f"💼 UID: <code>{method['uid']}</code>\n\n"
             f"⏰ This invoice will expire in 20 minutes.\n\n"
             f"⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
@@ -1061,7 +1067,7 @@ async def handle_amount_input(update, context):
         
     else:
         msg = (
-            f"✅ Kindly deposit exactly <b>{normalize_amount(amount)} USDT ({method['name']})</b> to the Address below:\n\n"
+            f"✅ Kindly deposit exactly <b>{fmt_money(amount)} USDT ({method['name']})</b> to the Address below:\n\n"
             f"💼 Address: <code>{method['address']}</code>\n\n"
             f"⏰ This invoice will expire in 20 minutes.\n\n"
             f"⏬ Kindly complete the deposit of exact amount within this time frame.\n\n"
@@ -1134,7 +1140,7 @@ async def handle_quantity_input(update, context):
     # Check balance
     if wallet.balance < total:
         await update.message.reply_text(
-            f"❌ You need ${normalize_amount(total)} but your balance is only ${normalize_amount(wallet.balance)}."
+            f"❌ You need ${fmt_money(total)} but your balance is only ${fmt_money(wallet.balance)}."
         )
         return ConversationHandler.END
 
@@ -1374,8 +1380,8 @@ async def handle_recharge_quantity_input(update: Update, context: ContextTypes.D
     if wallet.balance < total:
         await update.message.reply_text(
             f"💸 Insufficient balance.\n\n"
-            f"💰 Required: ${normalize_amount(total)}\n"
-            f"🔻 Your Balance: ${normalize_amount(wallet.balance)}"
+            f"💰 Required: ${fmt_money(total)}\n"
+            f"🔻 Your Balance: ${fmt_money(wallet.balance)}"
         )
         return ConversationHandler.END
 
@@ -1457,10 +1463,10 @@ async def confirm_recharge_purchase_callback(update: Update, context: ContextTyp
         f"• Product: {product.name}\n"
         f"• PUBG ID: {pubg_id}\n"
         f"• Quantity: {qty}\n"
-        f"• Total: ${normalize_amount(total)}\n\n"
+        f"• Total: ${fmt_money(total)}\n\n"
         f"{voucher_text}"
         f"🛍️ Your order #{order.id} is now in process.\n\n"
-        f"💰 Your new balance is ${normalize_amount(new_balance)}.",
+        f"💰 Your new balance is ${fmt_money(new_balance)}.",
         parse_mode="HTML"
     )
 
